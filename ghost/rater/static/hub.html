@@ -1,0 +1,526 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ghost in the GPU // Sensory Domains</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<style>
+  :root {
+    --bg: #FFF7E6;
+    --ink: #111111;
+    --muted: #5A5243;
+    --card: #FFFFFF;
+    --accent: #C8FF3D;
+    --like: #2EE6A0;
+    --dislike: #FF4D6D;
+    --violet: #A78BFA;
+    --amber: #FFD84D;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(17,17,17,.11) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: #fff;
+    border-bottom: 3px solid var(--ink);
+    padding: 14px 28px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .brand-badge {
+    background: var(--accent);
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    padding: 6px 12px;
+    font-size: 14px;
+    font-weight: 900;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .brand-sub {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--muted);
+  }
+
+  .btn {
+    background: #fff;
+    color: var(--ink);
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    padding: 8px 16px;
+    font-size: 12px;
+    font-weight: 900;
+    letter-spacing: .05em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: transform .1s ease, box-shadow .1s ease, background .12s ease;
+  }
+
+  .btn:hover {
+    background: var(--accent);
+    transform: translate(-1px, -1px);
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+
+  .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+
+  .btn-primary {
+    background: var(--accent);
+  }
+
+  .container {
+    max-width: 1320px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 32px 28px 64px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+  }
+
+  .hero-banner {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 18px;
+    padding: 24px 28px;
+    box-shadow: 6px 6px 0 var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .hero-text h1 {
+    font-size: 24px;
+    font-weight: 900;
+    letter-spacing: -.01em;
+    margin-bottom: 6px;
+  }
+
+  .hero-text p {
+    font-size: 13.5px;
+    color: var(--muted);
+    font-weight: 600;
+    max-width: 680px;
+    line-height: 1.5;
+  }
+
+  .domains-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 22px;
+  }
+
+  .domain-card {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 16px;
+    box-shadow: 6px 6px 0 var(--ink);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transition: transform .14s ease, box-shadow .14s ease;
+  }
+
+  .domain-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 8px 8px 0 var(--ink);
+  }
+
+  .domain-cover {
+    height: 170px;
+    background: #EDE4D3;
+    border-bottom: 3px solid var(--ink);
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    cursor: pointer;
+  }
+
+  .domain-cover img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .domain-cover-empty {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    background: rgba(255,255,255,.75);
+    padding: 6px 12px;
+    border: 2px dashed var(--ink);
+    border-radius: 8px;
+  }
+
+  .status-pill {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: #fff;
+    border: 2.5px solid var(--ink);
+    border-radius: 999px;
+    padding: 4px 10px;
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .status-pill.trained {
+    background: var(--like);
+    color: #04241A;
+  }
+
+  .status-pill.untrained {
+    background: var(--amber);
+    color: var(--ink);
+  }
+
+  .domain-body {
+    padding: 18px 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    flex: 1;
+  }
+
+  .domain-title {
+    font-size: 18px;
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .domain-desc {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--muted);
+    line-height: 1.45;
+    min-height: 36px;
+  }
+
+  .domain-metrics {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding-top: 6px;
+    border-top: 2px dashed rgba(17,17,17,.15);
+  }
+
+  .metric-chip {
+    background: var(--bg);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 4px 9px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .domain-actions {
+    padding: 14px 20px;
+    background: #FAF3E3;
+    border-top: 3px solid var(--ink);
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .domain-actions .btn {
+    flex: 1;
+    justify-content: center;
+    padding: 7px 10px;
+    font-size: 11px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  /* Modal */
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(17,17,17,.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 16px;
+  }
+
+  .modal-backdrop.open {
+    display: flex;
+  }
+
+  .modal {
+    background: #fff;
+    border: 4px solid var(--ink);
+    border-radius: 18px;
+    box-shadow: 10px 10px 0 var(--ink);
+    width: 100%;
+    max-width: 480px;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .modal h2 {
+    font-size: 18px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .field label {
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+  }
+
+  .field input, .field textarea {
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    background: var(--bg);
+  }
+
+  .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 6px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <div class="brand-badge">👻 Ghost in the GPU</div>
+    <span class="brand-sub">Multi-Domain Sensory Consciousness Engine</span>
+  </div>
+  <div>
+    <button class="btn btn-primary" id="newDomainBtn">➕ Create New Domain</button>
+  </div>
+</header>
+
+<main class="container">
+  <div class="hero-banner">
+    <div class="hero-text">
+      <h1>Select a Sensory Domain to Enter</h1>
+      <p>Each domain isolates its own image library, pairwise comparisons, and trained 1024D PE-Core neural brain. Manage images, move items across domains, train dedicated brains, or launch the 60FPS Flex Sorter.</p>
+    </div>
+    <button class="btn btn-primary" onclick="document.getElementById('newDomainBtn').click()">➕ Add Domain</button>
+  </div>
+
+  <div class="domains-grid" id="domainsGrid"></div>
+</main>
+
+<!-- Domain Modal (Create / Edit) -->
+<div class="modal-backdrop" id="modalBackdrop">
+  <div class="modal">
+    <h2 id="modalTitle">Create New Sensory Domain</h2>
+    <div class="field">
+      <label>Domain Name</label>
+      <input type="text" id="domNameInput" placeholder="e.g. Cyberpunk Wallpapers, Anime Portraits, Cars..." />
+    </div>
+    <div class="field">
+      <label>Description (Optional)</label>
+      <textarea id="domDescInput" rows="3" placeholder="What visual aesthetic does this domain capture?"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" id="cancelModalBtn">Cancel</button>
+      <button class="btn btn-primary" id="saveDomainBtn">Create Domain</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const grid = document.getElementById('domainsGrid');
+  const modal = document.getElementById('modalBackdrop');
+  const modalTitle = document.getElementById('modalTitle');
+  const newBtn = document.getElementById('newDomainBtn');
+  const cancelBtn = document.getElementById('cancelModalBtn');
+  const saveBtn = document.getElementById('saveDomainBtn');
+  const nameInput = document.getElementById('domNameInput');
+  const descInput = document.getElementById('domDescInput');
+
+  let editingDomainId = null;
+
+  function openCreateModal() {
+    editingDomainId = null;
+    modalTitle.textContent = 'Create New Sensory Domain';
+    saveBtn.textContent = 'Create Domain';
+    nameInput.value = '';
+    descInput.value = '';
+    modal.classList.add('open');
+    nameInput.focus();
+  }
+
+  function openEditModal(domain) {
+    editingDomainId = domain.id;
+    modalTitle.textContent = `Edit Domain: ${domain.name}`;
+    saveBtn.textContent = 'Save Changes';
+    nameInput.value = domain.name || '';
+    descInput.value = domain.description || '';
+    modal.classList.add('open');
+    nameInput.focus();
+  }
+
+  newBtn.onclick = openCreateModal;
+  cancelBtn.onclick = () => modal.classList.remove('open');
+
+  // Close modal when clicking the backdrop (outside the modal) or pressing Esc
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) modal.classList.remove('open');
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) {
+      modal.classList.remove('open');
+    }
+  });
+
+  saveBtn.onclick = async () => {
+    const name = nameInput.value.trim();
+    if (!name) return alert('Please enter a domain name.');
+    saveBtn.disabled = true;
+    try {
+      const url = editingDomainId ? `/api/domains/${editingDomainId}` : '/api/domains';
+      const method = editingDomainId ? 'PUT' : 'POST';
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, description: descInput.value.trim() })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.detail || `Server error ${res.status}`);
+      modal.classList.remove('open');
+      loadDomains();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  async function loadDomains() {
+    try {
+      const res = await fetch('/api/domains');
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const data = await res.json();
+      if (!data.ok) throw new Error(data.detail || 'Failed to load domains');
+      grid.innerHTML = '';
+
+      for (const d of (data.domains || [])) {
+      const card = document.createElement('div');
+      card.className = 'domain-card';
+
+      const safeName = escHtml(d.name);
+      const safeDesc = escHtml(d.description || 'Dedicated visual sensory domain.');
+
+      const coverHtml = d.cover_image_id
+        ? `<img src="/api/image/${d.cover_image_id}" alt="${safeName}" loading="lazy" />`
+        : `<div class="domain-cover-empty">No Images Yet — Click to Manage</div>`;
+
+      const accText = (d.accuracy !== null && d.accuracy !== undefined) ? ` (${d.accuracy}%)` : '';
+      const statusHtml = d.is_trained
+        ? `<span class="status-pill trained">🧠 Brain Active${accText}</span>`
+        : `<span class="status-pill untrained">⚡ Untrained</span>`;
+
+      card.innerHTML = `
+        <div class="domain-cover" onclick="location.href='/domain?id=${d.id}'">
+          ${coverHtml}
+          ${statusHtml}
+        </div>
+        <div class="domain-body">
+          <div class="domain-title" style="display:flex;justify-content:space-between;align-items:center;">
+            <span>${safeName}</span>
+            <button class="btn rename-card-btn" data-id="${d.id}" style="padding:2px 8px;font-size:11px;" title="Rename domain">✏️</button>
+          </div>
+          <div class="domain-desc">${safeDesc}</div>
+          <div class="domain-metrics">
+            <span class="metric-chip">🖼️ ${d.image_count} Images</span>
+            <span class="metric-chip">⚖️ ${d.comparison_count} Comparisons</span>
+          </div>
+        </div>
+        <div class="domain-actions">
+          <a class="btn btn-primary" href="/domain?id=${d.id}">📂 Open Workspace</a>
+          <a class="btn" href="/rate?domain_id=${d.id}">⚖️ Rate</a>
+          <a class="btn" href="/flex?domain_id=${d.id}">⚡ Flex Sort</a>
+        </div>
+      `;
+
+      const renameBtn = card.querySelector('.rename-card-btn');
+      if (renameBtn) {
+        renameBtn.onclick = (e) => {
+          e.stopPropagation();
+          openEditModal(d);
+        };
+      }
+      grid.appendChild(card);
+      }
+    } catch (err) {
+      console.warn('Failed to load domains:', err);
+      grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:40px;color:#ef4444;font-weight:800;">Failed to load domains: ' + escHtml(err.message || 'Unknown error') + '</div>';
+    }
+  }
+
+  loadDomains();
+})();
+</script>
+</body>
+</html>

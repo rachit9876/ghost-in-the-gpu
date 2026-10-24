@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghost in the GPU — Taste Neural Sorter</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  :root {
+    --bg:#FFF7E6; --panel:#FFFFFF; --panel-2:#FFFCF0;
+    --ink:#111111; --text:#111111; --muted:#5C5C5C;
+    --like:#2EE6A0; --dislike:#FF5470; --accent:#C8FF3D; --radius:18px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{height:100%}
+  body{
+    min-height:100vh;
+    background-color:var(--bg);
+    background-image:radial-gradient(rgba(17,17,17,.10) 1.5px, transparent 1.5px);
+    background-size:24px 24px;
+    color:var(--text);
+    font-family:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Monaco,Consolas,monospace;
+    overflow-x:hidden;user-select:none;
+    display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;
+  }
+
+  /* ── HEADER ─────────────────────────────────────── */
+  header{
+    position:sticky;top:0;z-index:1000;
+    display:flex;flex-direction:column;
+    padding:10px 20px 18px;background:var(--panel);
+    border-bottom:4px solid var(--ink);
+  }
+  .navbar-row{display:flex;align-items:center;justify-content:space-between;flex-wrap:nowrap;gap:12px;width:100%}
+  .header-actions{display:flex;align-items:center;flex-wrap:nowrap;gap:8px;flex-shrink:0}
+  .telemetry-bar{display:flex;flex-wrap:nowrap;align-items:center;gap:8px;flex-shrink:0}
+
+  .speed-ctrl{
+    display:inline-flex;align-items:center;gap:6px;
+    background:var(--panel-2);border:2px solid var(--ink);border-radius:9px;
+    padding:3px 8px 3px 10px;box-shadow:2px 2px 0 rgba(17,17,17,.16);
+  }
+  .speed-ctrl > span{font-size:9px;font-weight:900;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);white-space:nowrap}
+  .speed-ctrl select{
+    -webkit-appearance:none;appearance:none;background-color:transparent;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7'%3E%3Cpath d='M0 0h10L5 7z' fill='%23111'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 6px center;
+    border:none;border-radius:6px;color:var(--ink);
+    font-family:inherit;font-size:10.5px;font-weight:800;
+    padding:4px 20px 4px 6px;cursor:pointer;outline:none;
+    transition:background-color .12s ease;
+  }
+  .speed-ctrl select:hover{background-color:var(--accent)}
+  .speed-ctrl select option{background:#fff;color:var(--ink)}
+
+  .btn{
+    position:relative;background:#fff;color:var(--ink);
+    border:2px solid var(--ink);border-radius:9px;
+    padding:6px 12px;font-size:10.5px;font-weight:900;
+    font-family:inherit;letter-spacing:.05em;cursor:pointer;
+    display:inline-flex;align-items:center;gap:6px;
+    text-decoration:none;text-transform:uppercase;white-space:nowrap;
+    box-shadow:3px 3px 0 var(--ink);
+    transition:transform .1s ease, box-shadow .1s ease, background .12s ease;
+  }
+  .btn:hover{background:var(--accent);transform:translate(-1px,-1px);box-shadow:4px 4px 0 var(--ink)}
+  .btn:active{transform:translate(2px,2px);box-shadow:0 0 0 var(--ink)}
+  .btn:disabled{cursor:not-allowed;opacity:.55;box-shadow:2px 2px 0 var(--ink);transform:none}
+  .btn-primary{background:var(--accent);color:var(--ink)}
+  .btn-primary:hover{background:#DCFF74}
+
+  .progress-track{
+    position:absolute;left:0;right:0;bottom:0;height:11px;
+    background:#fff;border-top:3px solid var(--ink);overflow:hidden;
+  }
+  .progress-fill{
+    height:100%;width:100%;transform-origin:left center;transform:scaleX(0);
+    background:repeating-linear-gradient(-45deg,var(--accent) 0 8px,#9FE000 8px 16px);
+    transition:transform .22s cubic-bezier(.2,.9,.3,1);
+  }
+
+  /* ── ARENA ──────────────────────────────────────── */
+  .arena{
+    position:relative;z-index:1;flex:1;
+    display:flex;flex-direction:column;
+    padding:30px 32px 48px;gap:28px;
+    max-width:1400px;margin:0 auto;width:100%;
+  }
+
+  .deck-section{position:relative;height:430px;display:flex;align-items:center;justify-content:center}
+  .deck-section::before{
+    content:"";position:absolute;width:min(700px,94%);height:350px;
+    border-radius:28px;background:rgba(200,255,61,.22);
+    border:3px dashed rgba(17,17,17,.45);pointer-events:none;
+  }
+  /* NOTE: preserve-3d removed — it made the rounded/overflow-hidden cards
+     rasterise incorrectly while flying (transparent "holes" in the artwork). */
+  .deck-stage{
+    display:flex;gap:40px;align-items:center;justify-content:center;width:100%;
+  }
+  .deck-anchor{position:relative;width:248px;height:348px}
+
+  /* ── CARDS ─────────────────────────────────────── */
+  .sorter-card{
+    position:absolute;inset:0;background:#fff;
+    border:4px solid var(--ink);border-radius:14px;overflow:hidden;
+    transform-origin:center center;
+    box-shadow:6px 6px 0 var(--ink);
+    contain:layout style;            /* skip paint-contain: we want the shadow to bleed */
+    display:flex;flex-direction:column;
+  }
+  .sorter-card img{
+    width:100%;height:100%;object-fit:cover;
+    pointer-events:none;display:block;background:#fff;
+    transform:translateZ(0);         /* own layer → no repaint hole mid-flight */
+  }
+  .sorter-card::after{
+    content:"";position:absolute;inset:0;pointer-events:none;
+    background:linear-gradient(to top,rgba(0,0,0,.80) 0%,rgba(0,0,0,.26) 26%,transparent 52%);
+    z-index:1;
+  }
+  .sorter-card.flying{will-change:transform,opacity;pointer-events:none}
+  .sorter-card.flying.fly-like{border-color:var(--like)}
+  .sorter-card.flying.fly-dislike{border-color:var(--dislike)}
+
+  .score-tag{
+    position:absolute;bottom:10px;left:10px;right:10px;z-index:4;
+    display:flex;align-items:center;gap:8px;
+    padding:7px 10px;border-radius:10px;
+    font-size:9.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;
+    background:#fff;color:var(--ink);border:3px solid var(--ink);
+    box-shadow:3px 3px 0 var(--ink);
+  }
+  .tag-dot{width:8px;height:8px;border-radius:50%;flex:none;background:currentColor}
+  .tag-verdict{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tag-score{margin-left:auto;letter-spacing:0;font-size:10.5px}
+  .tag-like{background:var(--like);color:#04241A}
+  .tag-dislike{background:var(--dislike);color:#2A0009}
+
+  /* ── SCANNER HUD ───────────────────────────────── */
+  .scanner-hud{
+    position:absolute;top:6px;left:50%;transform:translateX(-50%);z-index:20;
+    background:var(--ink);color:#fff;border:3px solid var(--ink);
+    border-radius:999px;padding:9px 20px;
+    font-size:11.5px;font-weight:800;letter-spacing:.04em;
+    display:flex;align-items:center;gap:10px;white-space:nowrap;
+    max-width:min(92vw,780px);overflow:hidden;
+    box-shadow:4px 4px 0 rgba(17,17,17,.28);
+  }
+  .scanner-hud b{color:var(--accent);font-weight:900}
+  .pulse-dot{
+    width:10px;height:10px;border-radius:50%;flex:none;
+    background:var(--accent);border:2px solid #fff;
+    animation:pulse 1.05s ease-in-out infinite alternate;
+  }
+  @keyframes pulse{from{opacity:.28;transform:scale(.82)}to{opacity:1;transform:scale(1.12)}}
+
+  /* ── DESTINATION BINS ─────────────────────────── */
+  .stacks-container{display:grid;grid-template-columns:1fr 1fr;gap:26px}
+  .destination-bin{
+    position:relative;background:#fff;border:4px solid var(--ink);
+    border-radius:var(--radius);padding:18px 20px 20px;min-height:252px;
+    display:flex;flex-direction:column;box-shadow:8px 8px 0 var(--ink);
+    transition:background .16s ease, box-shadow .16s ease;
+    contain:layout style;
+  }
+  .bin-dislike{background:#FFE9ED}
+  .bin-like{background:#E4FFF3}
+  .destination-bin::after{
+    content:"";position:absolute;inset:0;border-radius:15px;
+    border:4px solid transparent;opacity:0;pointer-events:none;
+  }
+  .bin-dislike.active-target{background:#FFD6DE;box-shadow:8px 8px 0 var(--dislike)}
+  .bin-like.active-target{background:#CFFFE9;box-shadow:8px 8px 0 var(--like)}
+  .bin-like.impact::after{animation:ringPulse .55s cubic-bezier(.2,.8,.3,1);border-color:var(--like)}
+  .bin-dislike.impact::after{animation:ringPulse .55s cubic-bezier(.2,.8,.3,1);border-color:var(--dislike)}
+  @keyframes ringPulse{0%{opacity:.9;transform:scale(.97)}100%{opacity:0;transform:scale(1.045)}}
+  .bin-like.impact{animation:binThump .34s cubic-bezier(.25,1.5,.45,1)}
+  .bin-dislike.impact{animation:binThump .34s cubic-bezier(.25,1.5,.45,1)}
+  @keyframes binThump{
+    0%{transform:translateY(0) scale(1)}
+    38%{transform:translateY(-3px) scale(1.008)}
+    100%{transform:translateY(0) scale(1)}
+  }
+
+  .bin-header{
+    display:flex;justify-content:space-between;align-items:center;
+    gap:12px;margin-bottom:12px;padding-bottom:12px;border-bottom:3px solid var(--ink);
+  }
+  .bin-title{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;color:var(--ink)}
+  .bin-counter{
+    background:var(--ink);color:#fff;border:3px solid var(--ink);
+    border-radius:10px;padding:4px 12px;font-size:14px;font-weight:900;
+    font-family:inherit;letter-spacing:.04em;font-variant-numeric:tabular-nums;
+    transition:transform .16s cubic-bezier(.25,1.6,.45,1);
+  }
+  .bin-like .bin-counter{background:var(--like);color:#04241A}
+  .bin-dislike .bin-counter{background:var(--dislike);color:#2A0009}
+  .bin-counter.bump{transform:scale(1.22)}
+
+  .reason-banner{
+    font-size:11.5px;font-weight:700;letter-spacing:.02em;line-height:1.45;
+    color:var(--ink);background:#fff;border:3px solid var(--ink);
+    border-radius:10px;padding:9px 12px;margin-bottom:14px;min-height:40px;
+    display:flex;align-items:center;contain:layout style;
+  }
+
+  .stack-surface{
+    flex:1;position:relative;overflow:hidden;min-height:220px;
+    display:flex;align-items:center;justify-content:center;
+    contain:layout paint;
+  }
+  .mini-thumb{
+    position:absolute;width:140px;height:195px;object-fit:cover;
+    border-radius:12px;border:3px solid var(--ink);
+    box-shadow:4px 5px 0 var(--ink);transform-origin:center;
+    animation:popIn .28s cubic-bezier(.2,1.3,.3,1) both;
+    pointer-events:auto;cursor:pointer;
+    contain:layout style;
+    background:#fff;
+  }
+  @keyframes popIn{
+    0%{transform:scale(.72) rotate(var(--r,0deg)) translateY(12px);opacity:.35}
+    100%{transform:scale(1) rotate(var(--r,0deg)) translateY(0);opacity:1}
+  }
+
+  @media (max-width:860px){
+    header{padding:14px 16px 22px;gap:14px}
+    .arena{padding:20px 16px 36px;gap:22px}
+    .deck-section{height:370px}
+    .deck-anchor{width:196px;height:276px}
+    .stacks-container{grid-template-columns:1fr}
+    .scanner-hud{font-size:10px;padding:7px 14px}
+    .btn{padding:8px 13px;font-size:10.5px}
+  }
+  @media (prefers-reduced-motion: reduce){
+    *{animation-duration:.01ms!important;animation-iteration-count:1!important}
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="navbar-row">
+    <div class="header-actions">
+      <a href="/" class="btn">🏠 Hub</a>
+      <a href="/domain" id="backWorkspaceBtn" class="btn">📂 Workspace</a>
+      <button id="startBtn" class="btn btn-primary" title="Automatic stream sort">⚡ Auto Sort</button>
+      <button id="stepBtn" class="btn" title="Sort next card manually (→ or N)">👉 Next (Manual)</button>
+      <button id="resetBtn" class="btn">↺ Reload Deck</button>
+    </div>
+    <div class="telemetry-bar">
+      <div class="speed-ctrl">
+        <span>Domain:</span>
+        <select id="domainSwitchSel"></select>
+      </div>
+      <div class="speed-ctrl">
+        <span>Mode:</span>
+        <select id="stackModeSel">
+          <option value="1" selected>1 Stack</option>
+          <option value="2">2 Stacks (Turbo 2x)</option>
+        </select>
+      </div>
+      <div class="speed-ctrl">
+        <span>Threshold:</span>
+        <select id="thresholdSel" title="Standard median or strict percentiles">
+          <option value="50">Top 50% (Standard)</option>
+          <option value="70">70%+ Only</option>
+          <option value="80" selected>80%+ Only</option>
+          <option value="90">90%+ Only (Elite)</option>
+        </select>
+      </div>
+      <div class="speed-ctrl">
+        <span>Deck:</span>
+        <select id="deckSizeSel">
+          <option value="60">60 Cards</option>
+          <option value="120">120 Cards</option>
+          <option value="300">300 Cards</option>
+          <option value="0" selected>All Images</option>
+        </select>
+      </div>
+      <div class="speed-ctrl">
+        <span>Duration:</span>
+        <select id="targetDurationSel" title="Total time to complete the deck">
+          <option value="15">⚡ 15 sec</option>
+          <option value="30" selected>⚡ 30 sec</option>
+          <option value="45">⏱ 45 sec</option>
+          <option value="60">⏱ 1 min</option>
+          <option value="120">⏱ 2 min</option>
+          <option value="300">⏱ 5 min</option>
+        </select>
+      </div>
+    </div>
+  </div>
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+</header>
+
+<main class="arena">
+  <div class="deck-section">
+    <div class="scanner-hud">
+      <div class="pulse-dot"></div>
+      <span id="hudStatus">AI Ready — click "Auto Sort" or "Next (Manual)"</span>
+    </div>
+    <div class="deck-stage">
+      <div class="deck-anchor" id="deckAnchorA"></div>
+      <div class="deck-anchor" id="deckAnchorB"></div>
+    </div>
+  </div>
+
+  <div class="stacks-container">
+    <div class="destination-bin bin-dislike" id="binDislike">
+      <div class="bin-header">
+        <div class="bin-title"><span>❌ Low Affinity / Rejected</span></div>
+        <div class="bin-counter" id="countDislike">0</div>
+      </div>
+      <div class="reason-banner" id="reasonDislike">Waiting for stream...</div>
+      <div class="stack-surface" id="surfaceDislike"></div>
+    </div>
+    <div class="destination-bin bin-like" id="binLike">
+      <div class="bin-header">
+        <div class="bin-title"><span>❤️ High Affinity / Saved</span></div>
+        <div class="bin-counter" id="countLike">0</div>
+      </div>
+      <div class="reason-banner" id="reasonLike">Waiting for stream...</div>
+      <div class="stack-surface" id="surfaceLike"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+(() => {
+  'use strict';
+
+  /* ─── DOM refs ─────────────────────────────────── */
+  const startBtn          = document.getElementById('startBtn');
+  const stepBtn           = document.getElementById('stepBtn');
+  const resetBtn          = document.getElementById('resetBtn');
+  const hudStatus         = document.getElementById('hudStatus');
+  const targetDurationSel = document.getElementById('targetDurationSel');
+  const progressFill      = document.getElementById('progressFill');
+
+  const binLike         = document.getElementById('binLike');
+  const binDislike      = document.getElementById('binDislike');
+  const surfaceLike     = document.getElementById('surfaceLike');
+  const surfaceDislike  = document.getElementById('surfaceDislike');
+  const countLike       = document.getElementById('countLike');
+  const countDislike    = document.getElementById('countDislike');
+  const reasonLike      = document.getElementById('reasonLike');
+  const reasonDislike   = document.getElementById('reasonDislike');
+
+  const deckAnchorA = document.getElementById('deckAnchorA');
+  const deckAnchorB = document.getElementById('deckAnchorB');
+  const stackModeSel = document.getElementById('stackModeSel');
+  const thresholdSel = document.getElementById('thresholdSel');
+  const deckSizeSel  = document.getElementById('deckSizeSel');
+
+  /* ─── Browser Session Preferences ───────────────── */
+  try {
+    const savedMode = sessionStorage.getItem('flex_stack_mode');
+    if (savedMode && stackModeSel) stackModeSel.value = savedMode;
+    const savedThreshold = sessionStorage.getItem('flex_threshold');
+    if (savedThreshold && thresholdSel) thresholdSel.value = savedThreshold;
+    const savedDuration = sessionStorage.getItem('flex_target_duration');
+    if (savedDuration && targetDurationSel) targetDurationSel.value = savedDuration;
+    const savedDeckSize = sessionStorage.getItem('flex_deck_size');
+    if (savedDeckSize && deckSizeSel) deckSizeSel.value = savedDeckSize;
+  } catch (_) {}
+
+  /* ─── Tuning constants ─────────────────────────── */
+  const VISIBLE_PER_ANCHOR = 4;        // cards shown per anchor (paint budget)
+  const THUMB_LIMIT        = 4;        // mini-thumbs kept in each bin
+  const PRELOAD_AHEAD      = 20;       // images decoded ahead of the cursor
+  const HUD_THROTTLE_MS    = 120;
+
+  /* ─── State ────────────────────────────────────── */
+  let rawCards         = [];
+  let masterCards      = [];
+  let isRunning        = false;
+  let currentCardIndex = 0;
+  let rafId            = 0;
+  let lastTs           = 0;
+  let accum            = 0;
+
+  let binGeometry = null;
+  const anchorGeoA = { cx: 0, cy: 0 };
+  const anchorGeoB = { cx: 0, cy: 0 };
+  const binCounts  = { like: 0, dislike: 0 };
+
+  /* ═══════════════════════════════════════════════════
+     CARD POOL  —  zero DOM churn during sort
+     ═══════════════════════════════════════════════════ */
+  const cardPool    = [];
+  const cardByIndex = new Map();
+
+  function createPoolItem() {
+    const el = document.createElement('div');
+    el.className = 'sorter-card';
+    el.innerHTML =
+      '<img class="card-img" alt="" draggable="false" decoding="async">' +
+      '<div class="score-tag"><span class="tag-dot"></span>' +
+      '<span class="tag-verdict"></span>' +
+      '<span class="tag-score"></span></div>';
+    const item = {
+      el,
+      img:     el.querySelector('.card-img'),
+      tag:     el.querySelector('.score-tag'),
+      verdict: el.querySelector('.tag-verdict'),
+      score:   el.querySelector('.tag-score'),
+      busy: false,
+      anim: null,
+      idx: -1,
+    };
+    cardPool.push(item);
+    return item;
+  }
+
+  function acquireCard() {
+    for (const item of cardPool) {
+      if (!item.busy) {
+        item.busy = true;
+        return item;
+      }
+    }
+    const item = createPoolItem();
+    item.busy = true;
+    return item;
+  }
+
+  function releaseCard(item) {
+    if (!item) return;
+    if (item.anim) {
+      try { item.anim.cancel(); } catch (_) {}
+      item.anim = null;
+    }
+    item.busy = false;
+    item.idx  = -1;
+    item.el.classList.remove('flying', 'fly-like', 'fly-dislike');
+    item.el.style.zIndex = '';
+    if (item.el.parentNode) item.el.parentNode.removeChild(item.el);
+  }
+
+  function releaseAllCards() {
+    for (const item of cardPool) {
+      if (item.busy) releaseCard(item);
+    }
+    cardByIndex.clear();
+  }
+
+  /* ═══════════════════════════════════════════════════
+     TIMING
+     ═══════════════════════════════════════════════════ */
+  function getStepIntervalMs() {
+    const totalSec = targetDurationSel ? parseFloat(targetDurationSel.value) : 30;
+    const isDual   = stackModeSel && stackModeSel.value === '2';
+    const totalSteps = Math.ceil(Math.max(1, rawCards.length) / (isDual ? 2 : 1));
+    return Math.max(10, Math.round((totalSec * 1000) / totalSteps));
+  }
+
+  function getVisibleTotal() {
+    return stackModeSel && stackModeSel.value === '2'
+      ? VISIBLE_PER_ANCHOR * 2
+      : VISIBLE_PER_ANCHOR;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     DECK BUILDING
+     ═══════════════════════════════════════════════════ */
+  function calculatePercentile(scores, p) {
+    if (!scores.length) return 0;
+    const sorted = [...scores].sort((a, b) => a - b);
+    const index = (p / 100) * (sorted.length - 1);
+    const lo = Math.floor(index), hi = Math.ceil(index);
+    const w  = index - lo;
+    if (hi >= sorted.length) return sorted[lo];
+    return sorted[lo] * (1 - w) + sorted[hi] * w;
+  }
+
+  function applyThresholdAndBuildDeck() {
+    if (!masterCards.length) return;
+
+    const allScores = masterCards.map(c => c.score);
+    const pct       = thresholdSel ? parseInt(thresholdSel.value, 10) : 50;
+    const cutoff    = calculatePercentile(allScores, pct);
+    const likes = [], dislikes = [];
+
+    for (const card of masterCards) {
+      const isLike = card.score >= cutoff;
+      const c = {
+        id: card.id,
+        score: card.score,
+        decision: isLike ? 'like' : 'dislike',
+        confidence: Math.round(isLike
+          ? Math.min(99.9, 70 + (card.score - cutoff) * 22)
+          : Math.min(99.9, 70 + (cutoff - card.score) * 22)),
+        reasons: isLike
+          ? [
+              pct >= 90 ? 'Elite top 10% aesthetic signature'
+              : pct >= 70 ? `Exceeds top ${100 - pct}% affinity boundary`
+              : 'Matches positive taste cluster',
+              'Superior feature resonance',
+              'High-fidelity vector match'
+            ]
+          : [
+              pct >= 80 ? `Below strict top ${100 - pct}% criteria`
+              : 'Sub-threshold aesthetic score',
+              'Low visual affinity match',
+              'Filtered by negative taste boundary'
+            ]
+      };
+      (isLike ? likes : dislikes).push(c);
+    }
+
+    // Interleave minority across majority (organic distribution)
+    const combined = [];
+    const minArr = likes.length <= dislikes.length ? likes : dislikes;
+    const majArr = likes.length <= dislikes.length ? dislikes : likes;
+
+    if (minArr.length === 0) {
+      combined.push(...majArr);
+    } else {
+      const step = majArr.length / minArr.length;
+      let majIdx = 0;
+      for (let m = 0; m < minArr.length; m++) {
+        const target = Math.round((m + 1) * step);
+        const bucket = [];
+        while (majIdx < target && majIdx < majArr.length) bucket.push(majArr[majIdx++]);
+        bucket.push(minArr[m]);
+        for (let k = bucket.length - 1; k > 0; k--) {
+          const r = Math.floor(Math.random() * (k + 1));
+          [bucket[k], bucket[r]] = [bucket[r], bucket[k]];
+        }
+        combined.push(...bucket);
+      }
+      while (majIdx < majArr.length) combined.push(majArr[majIdx++]);
+    }
+    rawCards = combined;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     PRELOAD  —  decoded-bitmap cache warmer
+     ═══════════════════════════════════════════════════ */
+  const preloaded = new Set();
+  let preloadTick = 0;
+
+  function preloadAhead(count = PRELOAD_AHEAD) {
+    const start = currentCardIndex + getVisibleTotal();
+    const end   = Math.min(rawCards.length, start + count);
+    for (let i = start; i < end; i++) {
+      const url = `/api/image/${rawCards[i].id}`;
+      if (preloaded.has(url)) continue;
+      preloaded.add(url);
+      const img = new Image();
+      img.src = url;
+      if (img.decode) img.decode().catch(() => {});
+    }
+    if (preloaded.size > 500) {
+      const arr = [...preloaded];
+      for (let i = 0; i < 200; i++) preloaded.delete(arr[i]);
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     LOAD
+     ═══════════════════════════════════════════════════ */
+  const domainSwitchSel = document.getElementById('domainSwitchSel');
+  const backWorkspaceBtn = document.getElementById('backWorkspaceBtn');
+  const urlParams = new URLSearchParams(location.search);
+  const _parsedDomainId = parseInt(urlParams.get('domain_id') || sessionStorage.getItem('ghost_domain_id') || '1', 10);
+  let activeDomainId = Number.isFinite(_parsedDomainId) && _parsedDomainId > 0 ? _parsedDomainId : 1;
+  sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+
+  async function initDomainSelect() {
+    if (!domainSwitchSel) return;
+    try {
+      const res = await fetch('/api/domains');
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const d = await res.json();
+      domainSwitchSel.innerHTML = '';
+      for (const dom of d.domains) {
+        const opt = document.createElement('option');
+        opt.value = dom.id;
+        opt.textContent = dom.name;
+        if (dom.id === activeDomainId) opt.selected = true;
+        domainSwitchSel.appendChild(opt);
+      }
+      domainSwitchSel.onchange = () => {
+        activeDomainId = parseInt(domainSwitchSel.value, 10);
+        sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+        if (backWorkspaceBtn) backWorkspaceBtn.href = `/domain?id=${activeDomainId}`;
+        loadDeck();
+      };
+    } catch (err) {
+      console.warn('Failed to load domains:', err);
+      domainSwitchSel.innerHTML = '<option value="1">Failed to load</option>';
+    }
+    if (backWorkspaceBtn) backWorkspaceBtn.href = `/domain?id=${activeDomainId}`;
+  }
+  initDomainSelect();
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  async function loadDeck() {
+    startBtn.disabled = true;
+    startBtn.style.opacity = '0.5';
+    startBtn.textContent = '⏳ Loading...';
+    hudStatus.innerHTML  = 'Fetching scored library from 1024D PE-Core cache...';
+
+    const limitVal = deckSizeSel ? parseInt(deckSizeSel.value, 10) : 0;
+
+    // Clear stale state so a failed fetch doesn't leave old domain's deck visible
+    masterCards = [];
+    rawCards = [];
+    currentCardIndex = 0;
+
+    try {
+      const res  = await fetch(`/api/flex/cards?domain_id=${activeDomainId}&limit=${limitVal}`);
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error(data.detail || 'No images in this domain yet');
+
+      masterCards = data.cards;
+      applyThresholdAndBuildDeck();
+      preloadAhead();
+
+      renderDeck();
+      const pct  = thresholdSel ? thresholdSel.value : '80';
+      const pctL = pct === '50' ? 'Top 50%' : `${pct}%+ Only`;
+      const mode = stackModeSel && stackModeSel.value === '2' ? '2 Dual Stacks' : '1 Stack';
+      hudStatus.innerHTML =
+        `✨ <b>${rawCards.length} images</b> in <b>${escHtml(data.domain_name)}</b> [${pctL}, ${mode}] — hit <b>"Auto Sort"</b>`;
+      startBtn.disabled = false;
+      startBtn.style.opacity = '1';
+      startBtn.textContent = '⚡ Auto Sort';
+    } catch (e) {
+      renderDeck();  // clear stale DOM (rawCards is empty, so nothing renders)
+      hudStatus.innerHTML    = `⚠️ ${escHtml(e.message)} — <a href="/domain?id=${activeDomainId}" style="color:var(--ink);font-weight:900;">Open Workspace to Import</a>`;
+      startBtn.disabled      = false;
+      startBtn.style.opacity = '1';
+      startBtn.textContent   = '↺ Retry';
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     CARD FACTORY  (uses pool)
+
+     mode:
+       'none'  → no animation, card appears instantly
+       'intro' → one-off fade/scale on first deck render
+       'drop'  → replenishment during the stream:
+                 NEVER fades opacity (that's what punched the
+                 visible "hole" in the stack at high speed).
+     ═══════════════════════════════════════════════════ */
+  function createCardElement(idx, mode = 'none') {
+    if (idx >= rawCards.length) return null;
+    const c    = rawCards[idx];
+    const item = acquireCard();
+    const el   = item.el;
+
+    item.idx = idx;
+    el.id = `card-${idx}`;
+
+    // Content
+    item.img.src = `/api/image/${c.id}`;
+    item.verdict.textContent = `${c.decision.toUpperCase()} · ${c.confidence}%`;
+    item.score.textContent   = `${c.score > 0 ? '+' : ''}${c.score}`;
+    item.tag.className       = `score-tag ${c.decision === 'like' ? 'tag-like' : 'tag-dislike'}`;
+
+    // Deterministic slight scatter per index
+    const rot = +(Math.sin(idx * 7.3) * 4.2).toFixed(2);
+    const tx  = +(Math.cos(idx * 4.1) * 7).toFixed(2);
+    const ty  = +(Math.sin(idx * 3.7) * 7).toFixed(2);
+
+    el.dataset.rot = rot;
+    el.dataset.tx  = tx;
+    el.dataset.ty  = ty;
+    el.style.zIndex    = String(rawCards.length - idx + 10);
+    el.style.transform = `translate3d(${tx}px, ${ty}px, 0) rotate(${rot}deg)`;
+
+    cardByIndex.set(idx, item);
+
+    if (mode !== 'none') {
+      const intro = mode === 'intro';
+      const dur   = intro
+        ? 300
+        : Math.min(200, Math.max(80, getStepIntervalMs() * 1.2));
+      const fromY = intro ? ty - 40 : ty - 14;
+      const fromS = intro ? 1.05 : 1.02;
+
+      item.anim = el.animate([
+        {
+          transform: `translate3d(${tx}px, ${fromY.toFixed(2)}px, 0) rotate(${(rot * (intro ? 2 : 1)).toFixed(2)}deg) scale(${fromS})`,
+          opacity: intro ? 0 : 1          // ← replenishments stay opaque
+        },
+        {
+          transform: `translate3d(${tx}px, ${ty}px, 0) rotate(${rot}deg) scale(1)`,
+          opacity: 1
+        }
+      ], {
+        duration: dur,
+        easing: 'cubic-bezier(.2,.9,.3,1)'
+      });
+    }
+    return item;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     RENDER
+     ═══════════════════════════════════════════════════ */
+  function renderDeck() {
+    releaseAllCards();
+    deckAnchorA.innerHTML = '';
+    deckAnchorB.innerHTML = '';
+    surfaceLike.innerHTML = '';
+    surfaceDislike.innerHTML = '';
+
+    binCounts.like = 0;
+    binCounts.dislike = 0;
+    countLike.textContent    = '0';
+    countDislike.textContent = '0';
+    reasonLike.textContent    = 'Waiting for stream...';
+    reasonDislike.textContent = 'Waiting for stream...';
+    progressFill.style.transform = 'scaleX(0)';
+    binLike.classList.remove('active-target', 'impact');
+    binDislike.classList.remove('active-target', 'impact');
+
+    currentCardIndex = 0;
+    isRunning = false;
+    if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    startBtn.textContent = '⚡ Auto Sort';
+
+    const isDual = stackModeSel && stackModeSel.value === '2';
+    deckAnchorB.style.display = isDual ? 'block' : 'none';
+
+    const total = Math.min(getVisibleTotal(), rawCards.length);
+    for (let i = 0; i < total; i++) {
+      const item = createCardElement(i, 'intro');
+      if (!item) continue;
+      const anchor = isDual
+        ? (i % 2 === 0 ? deckAnchorA : deckAnchorB)
+        : deckAnchorA;
+      anchor.appendChild(item.el);
+    }
+
+    requestAnimationFrame(updateGeometry);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     GEOMETRY CACHE (no forced layout in hot path)
+     ═══════════════════════════════════════════════════ */
+  function updateGeometry() {
+    if (!binLike || !binDislike || !deckAnchorA) return;
+    const rL = binLike.getBoundingClientRect();
+    const rD = binDislike.getBoundingClientRect();
+    binGeometry = {
+      like:    { x: rL.left + rL.width / 2, y: rL.top + 100 },
+      dislike: { x: rD.left + rD.width / 2, y: rD.top + 100 }
+    };
+    const ra = deckAnchorA.getBoundingClientRect();
+    anchorGeoA.cx = ra.left + ra.width / 2;
+    anchorGeoA.cy = ra.top  + ra.height / 2;
+    if (deckAnchorB) {
+      const rb = deckAnchorB.getBoundingClientRect();
+      anchorGeoB.cx = rb.left + rb.width / 2;
+      anchorGeoB.cy = rb.top  + rb.height / 2;
+    }
+  }
+  window.addEventListener('resize', updateGeometry, { passive: true });
+  window.addEventListener('scroll', updateGeometry, { passive: true });
+
+  /* ═══════════════════════════════════════════════════
+     BIN FEEDBACK
+     ═══════════════════════════════════════════════════ */
+  function thumpBin(bin, counterEl) {
+    bin.classList.add('active-target', 'impact');
+    counterEl.classList.add('bump');
+    clearTimeout(bin._impactTimer);
+    bin._impactTimer = setTimeout(() => {
+      bin.classList.remove('impact', 'active-target');
+      counterEl.classList.remove('bump');
+    }, 180);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     HUD THROTTLE
+     ═══════════════════════════════════════════════════ */
+  let lastHudAt = 0;
+  function updateHud(html) {
+    const now = performance.now();
+    if (now - lastHudAt < HUD_THROTTLE_MS) return;
+    lastHudAt = now;
+    hudStatus.innerHTML = html;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     DISPATCH  —  ZERO reads, pool-aware
+     ═══════════════════════════════════════════════════ */
+  function dispatchCard(idx, anchorEl, anchorGeo) {
+    const item = cardByIndex.get(idx);
+    if (!item) return;
+    cardByIndex.delete(idx);
+
+    if (!binGeometry) updateGeometry();
+
+    const cardData   = rawCards[idx];
+    const isLike     = cardData.decision === 'like';
+    const targetBin  = isLike ? binLike : binDislike;
+    const targetCoord = isLike ? binGeometry.like : binGeometry.dislike;
+
+    thumpBin(targetBin, isLike ? countLike : countDislike);
+
+    const el  = item.el;
+    const tx  = parseFloat(el.dataset.tx)  || 0;
+    const ty  = parseFloat(el.dataset.ty)  || 0;
+    const rot = parseFloat(el.dataset.rot) || 0;
+    const sign = isLike ? 1 : -1;
+
+    const startX = anchorGeo.cx + tx;
+    const startY = anchorGeo.cy + ty;
+    const dx = targetCoord.x - startX;
+    const dy = targetCoord.y - startY;
+
+    if (item.anim) { try { item.anim.cancel(); } catch (_) {} item.anim = null; }
+
+    el.classList.add('flying', isLike ? 'fly-like' : 'fly-dislike');
+    el.style.zIndex = '9999';
+
+    const flyDur = Math.min(420, Math.max(180, getStepIntervalMs() * 2.5));
+
+    /* 3-keyframe arc with a real tumble.
+       perspective() lives inside the transform so the card keeps a
+       natural projection while it leaves the anchor. Angles are kept
+       modest so the artwork never turns edge-on or clips. */
+    item.anim = el.animate([
+      {
+        transform: `translate3d(${tx}px, ${ty}px, 0) rotate(${rot}deg) perspective(900px) rotateY(0deg) rotateX(0deg) scale(1)`,
+        opacity: 1,
+        offset: 0
+      },
+      {
+        transform: `translate3d(${(tx + dx * 0.42).toFixed(1)}px, ${(ty + dy * 0.42 - 70).toFixed(1)}px, 0) rotate(${(rot + sign * 12).toFixed(2)}deg) perspective(900px) rotateY(${sign * 22}deg) rotateX(-8deg) scale(1.08)`,
+        opacity: 1,
+        offset: 0.45
+      },
+      {
+        transform: `translate3d(${(tx + dx).toFixed(1)}px, ${(ty + dy).toFixed(1)}px, 0) rotate(${(rot + sign * 30).toFixed(2)}deg) perspective(900px) rotateY(${sign * 38}deg) rotateX(-16deg) scale(0.12)`,
+        opacity: 0,
+        offset: 1
+      }
+    ], {
+      duration: flyDur,
+      easing: 'cubic-bezier(.35,.05,.55,.95)',
+      fill: 'forwards'
+    });
+
+    item.anim.onfinish = () => releaseCard(item);
+    // Safety net: if the animation is interrupted/hidden, still recycle.
+    setTimeout(() => { if (item.busy && item.idx === idx && el.classList.contains('flying')) releaseCard(item); }, flyDur + 400);
+
+    /* Replenish same anchor IMMEDIATELY, fully opaque →
+       the stack never shows an empty slot while the card flies. */
+    const nextIdx = idx + getVisibleTotal();
+    if (nextIdx < rawCards.length) {
+      const nextItem = createCardElement(nextIdx, 'drop');
+      if (nextItem) anchorEl.appendChild(nextItem.el);
+    }
+
+    /* Counter (in-memory) */
+    const key = isLike ? 'like' : 'dislike';
+    binCounts[key]++;
+    (isLike ? countLike : countDislike).textContent = binCounts[key];
+
+    /* Reason banner — throttled */
+    const now = performance.now();
+    if (now - (targetBin._lastReason || 0) > 100) {
+      targetBin._lastReason = now;
+      const r = cardData.reasons[(Math.random() * cardData.reasons.length) | 0];
+      (isLike ? reasonLike : reasonDislike).textContent = `#${cardData.id}: ${r}`;
+    }
+
+    /* Mini-thumb — capped at 4 */
+    const targetSurface = isLike ? surfaceLike : surfaceDislike;
+    const thumb = document.createElement('img');
+    thumb.className = 'mini-thumb';
+    thumb.src = `/api/image/${cardData.id}`;
+    thumb.alt = '';
+    const pr = (Math.sin(idx * 5.7) * 9).toFixed(1);
+    const px = (Math.cos(idx * 3.3) * 14).toFixed(1);
+    const py = (Math.sin(idx * 2.9) * 12).toFixed(1);
+    thumb.style.transform = `translate3d(${px}px, ${py}px, 0) rotate(${pr}deg)`;
+    thumb.style.setProperty('--r', `${pr}deg`);
+    thumb.style.zIndex = idx;
+    targetSurface.appendChild(thumb);
+    while (targetSurface.children.length > THUMB_LIMIT) {
+      targetSurface.firstElementChild.remove();
+    }
+  }
+
+  /* ═══════════════════════════════════════════════════
+     STEP
+     ═══════════════════════════════════════════════════ */
+  function performSingleStep() {
+    if (currentCardIndex >= rawCards.length) {
+      isRunning = false;
+      hudStatus.innerHTML = '✨ <b>Complete</b> — 100% of the library sorted.';
+      startBtn.textContent = '⚡ Re-sort Deck';
+      progressFill.style.transform = 'scaleX(1)';
+      return false;
+    }
+
+    const isDual = stackModeSel && stackModeSel.value === '2';
+
+    if (isDual) {
+      const idxA = currentCardIndex;
+      const idxB = currentCardIndex + 1;
+      dispatchCard(idxA, deckAnchorA, anchorGeoA);
+      if (idxB < rawCards.length) dispatchCard(idxB, deckAnchorB, anchorGeoB);
+      currentCardIndex = Math.min(rawCards.length, currentCardIndex + 2);
+      updateHud(`Dual-stream <b>${currentCardIndex}/${rawCards.length}</b> — 2× throughput`);
+    } else {
+      dispatchCard(currentCardIndex, deckAnchorA, anchorGeoA);
+      const c = rawCards[currentCardIndex];
+      currentCardIndex += 1;
+      updateHud(`#${c.id} <b>${c.decision === 'like' ? 'SAVED' : 'REJECTED'}</b> · ${c.confidence}% · ${currentCardIndex}/${rawCards.length}`);
+    }
+
+    progressFill.style.transform =
+      `scaleX(${(currentCardIndex / rawCards.length).toFixed(4)})`;
+
+    if (++preloadTick % 10 === 0) preloadAhead();
+    return true;
+  }
+
+  /* ═══════════════════════════════════════════════════
+     rAF SCHEDULER (frame-aligned, catch-up capped)
+     ═══════════════════════════════════════════════════ */
+  function loop(ts) {
+    if (!isRunning) { rafId = 0; lastTs = 0; accum = 0; return; }
+    if (!lastTs) lastTs = ts;
+    let dt = ts - lastTs; lastTs = ts;
+    if (dt > 100) dt = 100;
+    accum += dt;
+
+    const interval = getStepIntervalMs();
+    if (accum >= interval) {
+      accum -= interval;
+      if (accum > interval * 2) accum = interval * 2;
+      if (!performSingleStep()) { isRunning = false; rafId = 0; return; }
+    }
+    rafId = requestAnimationFrame(loop);
+  }
+
+  /* ═══════════════════════════════════════════════════
+     WIRING
+     ═══════════════════════════════════════════════════ */
+  if (stackModeSel) {
+    stackModeSel.onchange = () => {
+      try { sessionStorage.setItem('flex_stack_mode', stackModeSel.value); } catch (_) {}
+      renderDeck();
+    };
+  }
+
+  if (thresholdSel) {
+    thresholdSel.onchange = () => {
+      try { sessionStorage.setItem('flex_threshold', thresholdSel.value); } catch (_) {}
+      applyThresholdAndBuildDeck();
+      renderDeck();
+      const pct  = thresholdSel.value;
+      const pctL = pct === '50' ? 'Top 50%' : `${pct}%+ Only`;
+      hudStatus.innerHTML =
+        `Threshold → <b>${pctL}</b> ` +
+        `(${rawCards.filter(c => c.decision === 'like').length} Likes / ` +
+        `${rawCards.filter(c => c.decision === 'dislike').length} Dislikes)`;
+    };
+  }
+
+  if (targetDurationSel) {
+    targetDurationSel.onchange = () => {
+      try { sessionStorage.setItem('flex_target_duration', targetDurationSel.value); } catch (_) {}
+    };
+  }
+
+  startBtn.onclick = () => {
+    if (currentCardIndex >= rawCards.length) renderDeck();
+    isRunning = !isRunning;
+    if (isRunning) {
+      startBtn.textContent = '⏸ Pause';
+      if (!rafId) {
+        lastTs = 0; accum = 0;
+        rafId = requestAnimationFrame(loop);
+      }
+    } else {
+      startBtn.textContent = '▶ Resume';
+      hudStatus.textContent = 'Paused';
+      if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+    }
+  };
+
+  if (stepBtn) {
+    stepBtn.onclick = () => {
+      if (isRunning) {
+        isRunning = false;
+        startBtn.textContent = '▶ Resume';
+        if (rafId) { cancelAnimationFrame(rafId); rafId = 0; }
+      }
+      if (currentCardIndex >= rawCards.length) renderDeck();
+      performSingleStep();
+    };
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.code === 'Space') {
+      e.preventDefault();
+      startBtn.click();
+    } else if (e.code === 'ArrowRight' || e.key === 'n' || e.key === 'N') {
+      e.preventDefault();
+      if (stepBtn) stepBtn.click();
+    }
+  });
+
+  resetBtn.onclick = () => loadDeck();
+  if (deckSizeSel) {
+    deckSizeSel.onchange = () => {
+      try { sessionStorage.setItem('flex_deck_size', deckSizeSel.value); } catch (_) {}
+      loadDeck();
+    };
+  }
+
+  /* Kick-off */
+  loadDeck();
+})();
+</script>
+</body>
+</html>

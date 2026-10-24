@@ -1,0 +1,50 @@
+# .gitignore for Ghost in the GPU
+
+# Environment
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# User Data & Personal Image Library (Keep personal media private by default)
+ghost/data/images/
+ghost/data/embeddings/
+ghost/data/*.db
+ghost/data/*.db-wal
+ghost/data/*.db-shm
+ghost/data/*.db-journal
+*.npy
+
+# Models & Checkpoints (User multi-domain neural brains & weights)
+ghost/models/*
+!ghost/models/.gitkeep
+*.pkl
+*.pt
+*.bin
+*.onnx
+*.safetensors
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini
+*.log
+
+# ═══════════════════════════════════════════════════
+# Backups and test artifacts (added 2026-10-23)
+# ═══════════════════════════════════════════════════
+*.bak.*
+*.bak
+.pytest_cache/
+.pytest_cache/*
+.coverage
+htmlcov/
+
+# Research / reference materials
+encoder_research_paper_*.pdf
+*.pdf.tmp

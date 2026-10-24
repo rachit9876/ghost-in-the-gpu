@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    body {
+      width: 280px;
+      margin: 0;
+      padding: 14px;
+      background: #FFF7E6;
+      color: #111111;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12.5px;
+    }
+    h2 {
+      margin: 0 0 10px 0;
+      font-size: 13.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 7px;
+    }
+    .status-badge {
+      display: inline-block;
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      border: 2px solid #111;
+      background: #a1a1aa;
+    }
+    .status-badge.online {
+      background: #2EE6A0;
+    }
+    .status-box {
+      background: #ffffff;
+      border: 2.5px solid #111111;
+      border-radius: 9px;
+      padding: 9px 11px;
+      margin-bottom: 10px;
+      font-size: 11.5px;
+      font-weight: 700;
+      box-shadow: 3px 3px 0 #111111;
+    }
+    .field {
+      margin-bottom: 10px;
+    }
+    .field label {
+      display: block;
+      font-size: 10.5px;
+      font-weight: 900;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+    }
+    .field select {
+      width: 100%;
+      border: 2.5px solid #111111;
+      border-radius: 8px;
+      padding: 6px 8px;
+      font-size: 12px;
+      font-weight: 800;
+      background: #C8FF3D;
+      color: #111111;
+      box-shadow: 2px 2px 0 #111111;
+      cursor: pointer;
+    }
+    .hint {
+      font-size: 11px;
+      color: #5A5243;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+  <h2>
+    <span class="status-badge" id="dot"></span>
+    👻 Ghost in the GPU
+  </h2>
+  <div class="status-box" id="infoBox">Checking server...</div>
+
+  <div class="field" id="domainField" style="display:none;">
+    <label>Active Domain for Logging & Scoring:</label>
+    <select id="domainSelect"></select>
+  </div>
+
+  <div class="hint">
+    Hover any web image and click <b>Log</b> or press <b>Alt+L</b>.<br>
+    Images are embedded in 1024D PE-Core space and added to your selected domain.
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+# Ghost in the GPU: Reproducible Dependencies
+
+# Core Deep Learning (Vision Backbone)
+torch>=2.2.0
+torchvision>=0.17.0
+timm>=1.0.14
+transformers>=4.40.0
+ftfy>=6.0.0
+regex>=2024.0.0
+
+# Scientific Computing & Active Machine Learning
+numpy>=1.26.0
+scikit-learn>=1.4.0
+
+# Web Engine & High-Throughput Server
+fastapi>=0.110.0
+python-multipart>=0.0.9
+uvicorn[standard]>=0.28.0
+
+# Robust Image Processing (JPEG, PNG, WebP, AVIF, HEIC)
+pillow>=10.2.0
+pillow-heif>=0.15.0,<1.0
+pillow-avif-plugin>=1.4.0,<2.0
+huggingface-hub>=0.20.0
+einops>=0.7.0
+
+# Rich terminal dashboard for tournament output (optional fallback if missing)
+rich>=13.7.0

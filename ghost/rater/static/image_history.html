@@ -1,0 +1,616 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ghost in the GPU — Comparison History</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  :root {
+    --bg:#FFF7E6; --panel:#FFFFFF; --panel-2:#FFFCF0;
+    --ink:#111111; --text:#111111; --muted:#5C5C5C;
+    --like:#2EE6A0; --dislike:#FF5470; --accent:#C8FF3D;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    min-height:100vh;
+    background-color:var(--bg);
+    background-image:radial-gradient(rgba(17,17,17,.08) 1.5px,transparent 1.5px);
+    background-size:20px 20px;
+    color:var(--text);
+    font-family:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Monaco,Consolas,monospace;
+    padding:16px;
+    -webkit-font-smoothing:antialiased;
+  }
+  .container{max-width:1400px;margin:0 auto;display:flex;flex-direction:column;gap:14px}
+  header{
+    background:var(--panel);border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);border-radius:var(--radius);
+    padding:10px 16px;display:flex;justify-content:space-between;
+    align-items:center;flex-wrap:wrap;gap:10px;
+  }
+  .title-group{display:flex;align-items:center;gap:10px}
+  .brand{
+    background:var(--ink);color:var(--accent);padding:3px 8px;
+    border-radius:6px;font-size:11px;font-weight:900;
+    letter-spacing:.08em;text-transform:uppercase;
+  }
+  h1{font-size:14px;font-weight:900}
+  .nav-btn{
+    background:var(--panel-2);border:2px solid var(--ink);color:var(--ink);
+    text-decoration:none;font-size:11px;font-weight:800;
+    padding:4px 10px;border-radius:7px;
+    box-shadow:2px 2px 0 var(--ink);
+    display:inline-flex;align-items:center;gap:4px;
+    transition:transform .08s,box-shadow .08s;
+  }
+  .nav-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .nav-btn.active{background:var(--accent)}
+
+  .search-bar{
+    background:var(--panel);border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);border-radius:var(--radius);
+    padding:14px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+  }
+  .search-bar label{font-size:11px;font-weight:900;text-transform:uppercase;letter-spacing:.05em}
+  .search-bar input[type="number"]{
+    border:2.5px solid var(--ink);border-radius:8px;
+    padding:8px 12px;font-family:inherit;font-size:13px;font-weight:800;
+    background:#fff;width:180px;outline:none;
+  }
+  .search-bar input[type="number"]:focus{box-shadow:2px 2px 0 var(--ink)}
+  .btn{
+    background:var(--panel-2);color:var(--ink);
+    border:2px solid var(--ink);border-radius:7px;
+    padding:7px 14px;font-family:inherit;font-size:11px;
+    font-weight:900;cursor:pointer;box-shadow:2px 2px 0 var(--ink);
+    text-transform:uppercase;letter-spacing:.05em;
+    transition:transform .08s,box-shadow .08s;
+  }
+  .btn:hover:not(:disabled){transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--ink)}
+  .btn:active:not(:disabled){transform:translate(1px,1px);box-shadow:0 0 0 var(--ink)}
+  .btn:disabled{opacity:.45;cursor:not-allowed}
+  .btn-primary{background:var(--accent)}
+  .btn-danger{background:var(--dislike);color:#fff}
+
+  .stats-bar{
+    background:var(--panel);border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);border-radius:var(--radius);
+    padding:10px 16px;display:flex;justify-content:space-between;
+    align-items:center;flex-wrap:wrap;gap:10px;
+    font-size:12px;font-weight:800;
+  }
+  .selection-info{color:var(--muted)}
+
+  table{
+    width:100%;border-collapse:collapse;
+    background:var(--panel);border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);border-radius:var(--radius);
+    overflow:hidden;
+  }
+  thead{background:var(--panel-2)}
+  th{
+    text-align:left;font-size:10px;font-weight:900;
+    text-transform:uppercase;letter-spacing:.06em;
+    padding:10px 12px;border-bottom:2.5px solid var(--ink);
+    white-space:nowrap;
+  }
+  td{
+    padding:10px 12px;border-bottom:1px solid rgba(17,17,17,.12);
+    font-size:12px;font-weight:600;vertical-align:middle;
+  }
+  tr:hover{background:var(--panel-2)}
+  tr.selected{background:#EAF8D0}
+  tr.is-winner-of-target{background:#E4FFF3}
+  tr.is-loser-of-target{background:#FFE9ED}
+
+  .id-col{width:60px;text-align:center}
+  .id-col input[type="checkbox"]{
+    width:18px;height:18px;cursor:pointer;accent-color:var(--ink);
+  }
+  .comp-id{font-family:inherit;font-weight:800;font-size:12px}
+
+  .thumb-strip{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+  .thumb{
+    position:relative;width:44px;height:44px;border-radius:6px;
+    border:2px solid var(--ink);overflow:hidden;background:#09090c;
+    flex-shrink:0;
+  }
+  .thumb img{width:100%;height:100%;object-fit:cover}
+  .thumb-label{
+    position:absolute;bottom:0;left:0;right:0;
+    background:rgba(17,17,17,.85);color:#fff;
+    font-size:8.5px;font-weight:900;text-align:center;
+    padding:1px 0;
+  }
+  .winner-thumb{border-color:var(--like);border-width:3px}
+  .loser-thumb{border-color:#999}
+  .target-image-ring{box-shadow:0 0 0 2px var(--accent)}
+
+  .badge{
+    display:inline-block;padding:2px 8px;border-radius:5px;
+    font-size:10px;font-weight:900;text-transform:uppercase;
+    letter-spacing:.04em;
+  }
+  .badge-sampler{background:#E8F4F8;border:1.5px solid var(--ink)}
+  .badge-retest{background:var(--dislike);color:#fff;border:1.5px solid var(--ink)}
+  .badge-normal{background:var(--panel-2);border:1.5px solid var(--ink);color:var(--muted)}
+
+  .pagination{
+    background:var(--panel);border:3px solid var(--ink);
+    box-shadow:4px 4px 0 var(--ink);border-radius:var(--radius);
+    padding:10px 16px;display:flex;justify-content:space-between;
+    align-items:center;flex-wrap:wrap;gap:10px;
+    font-size:12px;font-weight:800;
+  }
+
+  .empty-state{
+    background:var(--panel);border:3px dashed var(--ink);
+    border-radius:var(--radius);padding:48px 24px;
+    text-align:center;font-size:13px;font-weight:800;color:var(--muted);
+  }
+
+  .spinner{
+    display:inline-block;width:20px;height:20px;
+    border:3px solid rgba(17,17,17,.2);border-top-color:var(--ink);
+    border-radius:50%;animation:spin .7s linear infinite;
+    vertical-align:middle;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  .toast{
+    position:fixed;bottom:20px;right:20px;
+    background:var(--ink);color:var(--accent);
+    border:3px solid var(--ink);border-radius:9px;
+    padding:10px 16px;font-size:12px;font-weight:900;
+    box-shadow:4px 4px 0 rgba(0,0,0,.35);
+    display:none;z-index:1000;
+  }
+  .toast.show{display:block}
+
+  .target-hint{
+    background:#FFEFCB;border:2px solid var(--ink);
+    border-radius:8px;padding:6px 12px;
+    font-size:11px;font-weight:800;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="title-group">
+      <div class="brand">Ghost in the GPU</div>
+      <h1>Comparison History</h1>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
+      <select id="domainSel" class="btn" style="padding:4px 10px;"></select>
+      <a href="/" class="nav-btn">🏠 Hub</a>
+      <a href="/domain" id="domainNavBtn" class="nav-btn">📂 Workspace</a>
+      <a href="/rate" id="rateNavBtn" class="nav-btn">⚔ Rater</a>
+      <a href="/audit" id="auditNavBtn" class="nav-btn">🔍 Audit</a>
+      <a href="/history" class="nav-btn active">📜 History</a>
+    </div>
+  </header>
+
+  <div class="search-bar">
+    <label for="imageIdInput">Image ID:</label>
+    <input type="number" id="imageIdInput" placeholder="e.g. 335" min="1" />
+    <button class="btn btn-primary" id="searchBtn">🔎 Search</button>
+    <button class="btn" id="clearBtn">Show All Comparisons</button>
+    <span id="targetHint" class="target-hint" style="display:none;"></span>
+  </div>
+
+  <div class="stats-bar">
+    <span id="statsText">Loading...</span>
+    <span class="selection-info" id="selectionInfo">0 selected</span>
+  </div>
+
+  <div id="tableWrap">
+    <div class="empty-state">
+      <div class="spinner"></div>
+      Loading comparisons...
+    </div>
+  </div>
+
+  <div class="pagination">
+    <button class="btn" id="prevBtn" disabled>← Prev</button>
+    <span id="pageInfo">Page 1 of 1</span>
+    <button class="btn" id="nextBtn" disabled>Next →</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(() => {
+  const params = new URLSearchParams(location.search);
+  const parsedDomainId = parseInt(params.get('domain_id') || sessionStorage.getItem('ghost_domain_id') || '1', 10);
+  let activeDomainId = Number.isFinite(parsedDomainId) && parsedDomainId > 0 ? parsedDomainId : 1;
+  sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+
+  // Optional pre-filter from URL: /history?image_id=335
+  const prefilterImageId = parseInt(params.get('image_id') || '', 10);
+
+  let state = {
+    imageId: Number.isFinite(prefilterImageId) && prefilterImageId > 0 ? prefilterImageId : null,
+    page: 1,
+    perPage: 50,
+    total: 0,
+    totalPages: 1,
+    comparisons: [],
+    selected: new Set(),
+    loading: false,
+  };
+
+  const domainSel = document.getElementById('domainSel');
+  const imageIdInput = document.getElementById('imageIdInput');
+  const searchBtn = document.getElementById('searchBtn');
+  const clearBtn = document.getElementById('clearBtn');
+  const targetHint = document.getElementById('targetHint');
+  const statsText = document.getElementById('statsText');
+  const selectionInfo = document.getElementById('selectionInfo');
+  const tableWrap = document.getElementById('tableWrap');
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+  const pageInfo = document.getElementById('pageInfo');
+  const toast = document.getElementById('toast');
+
+  function escHtml(s) {
+    return String(s ?? '').replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+
+  function showToast(msg, ms = 3000) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => toast.classList.remove('show'), ms);
+  }
+
+  function syncNavLinks() {
+    const back = `/domain?id=${activeDomainId}`;
+    document.getElementById('domainNavBtn').href = back;
+    document.getElementById('rateNavBtn').href = `/rate?domain_id=${activeDomainId}`;
+    document.getElementById('auditNavBtn').href = `/audit?domain_id=${activeDomainId}`;
+  }
+
+  async function initDomains() {
+    syncNavLinks();
+    try {
+      const res = await fetch('/api/domains');
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const d = await res.json();
+      domainSel.innerHTML = '';
+      for (const dom of (d.domains || [])) {
+        const opt = document.createElement('option');
+        opt.value = dom.id;
+        opt.textContent = dom.name;
+        if (dom.id === activeDomainId) opt.selected = true;
+        domainSel.appendChild(opt);
+      }
+      domainSel.onchange = () => {
+        activeDomainId = parseInt(domainSel.value, 10);
+        sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+        syncNavLinks();
+        state.page = 1;
+        state.selected.clear();
+        loadComparisons();
+      };
+    } catch (err) {
+      console.warn('Failed to load domains:', err);
+      domainSel.innerHTML = '<option value="1">Failed to load</option>';
+    }
+  }
+
+  function buildComparisonRow(c) {
+    const isRetest = c.is_retest === 1;
+    const winner = c.winner_id;
+    const losers = c.losers || [];
+
+    const isTargetWinner = state.imageId !== null && winner === state.imageId;
+    const isTargetLoser = state.imageId !== null && losers.includes(state.imageId);
+    const rowClass = [
+      'comparison-row',
+      state.selected.has(c.id) ? 'selected' : '',
+      isTargetWinner ? 'is-winner-of-target' : '',
+      isTargetLoser ? 'is-loser-of-target' : '',
+    ].filter(Boolean).join(' ');
+
+    const winnerThumb = `
+      <div class="thumb winner-thumb ${state.imageId === winner ? 'target-image-ring' : ''}"
+           title="Winner #${winner}">
+        <img src="/api/image/${winner}" loading="lazy" onerror="this.style.opacity=0.2">
+        <div class="thumb-label">#${winner}</div>
+      </div>`;
+
+    const loserThumbs = losers.slice(0, 4).map(lid => `
+      <div class="thumb loser-thumb ${state.imageId === lid ? 'target-image-ring' : ''}"
+           title="Loser #${lid}">
+        <img src="/api/image/${lid}" loading="lazy" onerror="this.style.opacity=0.2">
+        <div class="thumb-label">#${lid}</div>
+      </div>`).join('');
+
+    const extraLosers = losers.length > 4
+      ? `<span style="font-size:11px;color:var(--muted);font-weight:800;">+${losers.length - 4} more</span>`
+      : '';
+
+    const retestBadge = isRetest
+      ? `<span class="badge badge-retest" title="Retest of #${c.retest_of || '?'}">🪞 Retest${c.retest_of ? ` of #${c.retest_of}` : ''}</span>`
+      : '';
+
+    const dateStr = c.created_at
+      ? new Date(c.created_at * 1000).toLocaleString()
+      : '—';
+
+    return `
+      <tr class="${rowClass}" data-comparison-id="${c.id}">
+        <td class="id-col">
+          <input type="checkbox" class="row-checkbox" data-comparison-id="${c.id}"
+                 ${state.selected.has(c.id) ? 'checked' : ''}>
+        </td>
+        <td><span class="comp-id">#${c.id}</span></td>
+        <td style="font-size:11px;color:var(--muted);">${escHtml(dateStr)}</td>
+        <td>
+          <div class="thumb-strip">${winnerThumb}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;">Winner</div>
+        </td>
+        <td>
+          <div class="thumb-strip">${loserThumbs}${extraLosers}</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:3px;">${losers.length} loser${losers.length === 1 ? '' : 's'}</div>
+        </td>
+        <td><span class="badge badge-sampler">${escHtml(c.sampler)}</span></td>
+        <td>${retestBadge || '<span class="badge badge-normal">original</span>'}</td>
+      </tr>`;
+  }
+
+  function renderTable() {
+    if (state.loading) {
+      tableWrap.innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading comparisons...</div>';
+      return;
+    }
+
+    if (state.comparisons.length === 0) {
+      const msg = state.imageId !== null
+        ? `No comparisons found involving image #${state.imageId} in this domain.`
+        : 'No comparisons in this domain yet.';
+      tableWrap.innerHTML = `<div class="empty-state">${escHtml(msg)}</div>`;
+      return;
+    }
+
+    const allChecked = state.comparisons.every(c => state.selected.has(c.id));
+    const someChecked = state.comparisons.some(c => state.selected.has(c.id));
+
+    tableWrap.innerHTML = `
+      <table>
+        <thead>
+          <tr>
+            <th class="id-col">
+              <input type="checkbox" id="selectAllCheckbox"
+                     ${allChecked ? 'checked' : ''}
+                     ${(!allChecked && someChecked) ? 'data-indeterminate="1"' : ''}>
+            </th>
+            <th>ID</th>
+            <th>Date</th>
+            <th>Winner</th>
+            <th>Losers</th>
+            <th>Sampler</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${state.comparisons.map(buildComparisonRow).join('')}
+        </tbody>
+      </table>
+      <div style="background:var(--panel);border:3px solid var(--ink);border-top:0;border-radius:0 0 var(--radius) var(--radius);padding:10px 16px;display:flex;gap:10px;align-items:center;justify-content:flex-end;">
+        <button class="btn btn-danger" id="bulkDeleteBtn" ${state.selected.size === 0 ? 'disabled' : ''}>
+          🗑️ Delete Selected (${state.selected.size})
+        </button>
+      </div>`;
+
+    // Indeterminate state for the header checkbox
+    const headerCb = document.getElementById('selectAllCheckbox');
+    if (headerCb && headerCb.dataset.indeterminate === '1') {
+      headerCb.indeterminate = true;
+    }
+
+    // Wire row checkboxes
+    document.querySelectorAll('.row-checkbox').forEach(cb => {
+      cb.onchange = (e) => {
+        const id = parseInt(e.target.dataset.comparisonId, 10);
+        if (e.target.checked) state.selected.add(id);
+        else state.selected.delete(id);
+        updateSelectionUI();
+        // Update the visual row class
+        const tr = e.target.closest('tr');
+        if (tr) tr.classList.toggle('selected', e.target.checked);
+        // Sync the header checkbox state
+        syncHeaderCheckbox();
+      };
+    });
+
+    // Wire select-all
+    if (headerCb) {
+      headerCb.onchange = () => {
+        const checked = headerCb.checked;
+        state.comparisons.forEach(c => {
+          if (checked) state.selected.add(c.id);
+          else state.selected.delete(c.id);
+        });
+        document.querySelectorAll('.row-checkbox').forEach(cb => {
+          cb.checked = checked;
+          const tr = cb.closest('tr');
+          if (tr) tr.classList.toggle('selected', checked);
+        });
+        updateSelectionUI();
+      };
+    }
+
+    // Wire bulk delete
+    const delBtn = document.getElementById('bulkDeleteBtn');
+    if (delBtn) delBtn.onclick = bulkDeleteSelected;
+  }
+
+  function syncHeaderCheckbox() {
+    const headerCb = document.getElementById('selectAllCheckbox');
+    if (!headerCb) return;
+    const total = state.comparisons.length;
+    const checked = state.comparisons.filter(c => state.selected.has(c.id)).length;
+    headerCb.checked = total > 0 && checked === total;
+    headerCb.indeterminate = checked > 0 && checked < total;
+  }
+
+  function updateSelectionUI() {
+    selectionInfo.textContent = `${state.selected.size} selected`;
+    const delBtn = document.getElementById('bulkDeleteBtn');
+    if (delBtn) {
+      delBtn.disabled = state.selected.size === 0;
+      delBtn.textContent = `🗑️ Delete Selected (${state.selected.size})`;
+    }
+  }
+
+  async function loadComparisons() {
+    state.loading = true;
+    renderTable();
+
+    const qs = new URLSearchParams({
+      domain_id: String(activeDomainId),
+      page: String(state.page),
+      per_page: String(state.perPage),
+      include_retests: 'true',
+    });
+    if (state.imageId !== null) qs.set('image_id', String(state.imageId));
+
+    try {
+      const res = await fetch(`/api/comparisons?${qs}`);
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.detail || 'Failed to load comparisons');
+
+      state.comparisons = d.comparisons || [];
+      state.total = d.total || 0;
+      state.totalPages = d.total_pages || 1;
+
+      // If we're past the last page after a delete, snap to the last page
+      if (state.page > state.totalPages) {
+        state.page = state.totalPages;
+        state.loading = false;
+        return loadComparisons();
+      }
+
+      // Prune selections to only rows still visible
+      const visibleIds = new Set(state.comparisons.map(c => c.id));
+      state.selected = new Set([...state.selected].filter(id => visibleIds.has(id)));
+
+      const label = state.imageId !== null
+        ? `Comparisons involving image #${state.imageId}`
+        : `All comparisons`;
+      statsText.innerHTML = `<b>${escHtml(label)}</b> — ${d.total} total in <b>${escHtml(d.domain_name)}</b>`;
+
+      if (state.imageId !== null) {
+        targetHint.style.display = 'inline-block';
+        targetHint.textContent = `🎯 Filtering by image #${state.imageId}`;
+        imageIdInput.value = state.imageId;
+      } else {
+        targetHint.style.display = 'none';
+      }
+
+      pageInfo.textContent = `Page ${state.page} of ${state.totalPages} (${d.total} total)`;
+      prevBtn.disabled = state.page <= 1;
+      nextBtn.disabled = state.page >= state.totalPages;
+
+      state.loading = false;
+      renderTable();
+      updateSelectionUI();
+    } catch (err) {
+      state.loading = false;
+      tableWrap.innerHTML = `<div class="empty-state" style="color:#ef4444;">Error: ${escHtml(err.message)}</div>`;
+      statsText.textContent = 'Failed to load.';
+    }
+  }
+
+  async function bulkDeleteSelected() {
+    const ids = [...state.selected];
+    if (ids.length === 0) return;
+
+    const filterNote = state.imageId !== null
+      ? `\nFiltered by image #${state.imageId}.`
+      : '';
+    const promptText =
+      `⚠️ DELETE ${ids.length} COMPARISON${ids.length === 1 ? '' : 'S'} PERMANENTLY\n` +
+      `${filterNote}\n` +
+      `This removes them from the database. Any dependent retests will also be deleted.\n` +
+      `The model will NOT be retrained — retrain separately if you want the change to affect scores.\n\n` +
+      `Type DELETE to confirm:`;
+    const typed = prompt(promptText);
+    if (typed === null) return;
+    if (typed.trim().toUpperCase() !== 'DELETE') {
+      alert('Deletion cancelled — you must type DELETE exactly.');
+      return;
+    }
+
+    const delBtn = document.getElementById('bulkDeleteBtn');
+    if (delBtn) { delBtn.disabled = true; delBtn.textContent = '⏳ Deleting...'; }
+
+    try {
+      const res = await fetch('/api/comparisons/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comparison_ids: ids, domain_id: activeDomainId })
+      });
+      const d = await res.json().catch(() => ({}));
+      if (!res.ok || !d.ok) {
+        alert('Delete failed: ' + (d.detail || d.error || `HTTP ${res.status}`));
+        return;
+      }
+      showToast(`🗑️ Deleted ${d.total_deleted} (${d.deleted_direct} direct + ${d.deleted_retests} retests)`, 4000);
+      state.selected.clear();
+      await loadComparisons();
+    } catch (err) {
+      alert('Network error: ' + err.message);
+    } finally {
+      const db = document.getElementById('bulkDeleteBtn');
+      if (db) { db.disabled = state.selected.size === 0; }
+    }
+  }
+
+  // Wire search
+  searchBtn.onclick = () => {
+    const v = parseInt(imageIdInput.value, 10);
+    if (!Number.isFinite(v) || v <= 0) {
+      alert('Please enter a valid image ID (a positive number).');
+      return;
+    }
+    state.imageId = v;
+    state.page = 1;
+    state.selected.clear();
+    loadComparisons();
+  };
+
+  imageIdInput.onkeydown = (e) => {
+    if (e.key === 'Enter') searchBtn.click();
+  };
+
+  clearBtn.onclick = () => {
+    imageIdInput.value = '';
+    state.imageId = null;
+    state.page = 1;
+    state.selected.clear();
+    loadComparisons();
+  };
+
+  prevBtn.onclick = () => {
+    if (state.page > 1) { state.page--; loadComparisons(); }
+  };
+  nextBtn.onclick = () => {
+    if (state.page < state.totalPages) { state.page++; loadComparisons(); }
+  };
+
+  // Kick off
+  initDomains().then(() => loadComparisons());
+})();
+</script>
+</body>
+</html>

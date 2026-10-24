@@ -1,0 +1,232 @@
+/* Ghost in the GPU Extension Overlay Styles */
+.ghost-gpu-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  z-index: 2147483640;
+}
+
+.ghost-gpu-overlay {
+  position: absolute;
+  pointer-events: auto;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center; /* Center buttons and status badge together */
+  gap: 6px;
+  background: transparent;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 12px;
+  color: #fafafa;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(3px) scale(0.96);
+  transition: opacity 0.18s cubic-bezier(0.16, 1, 0.3, 1), transform 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform, opacity;
+  user-select: none;
+}
+
+.ghost-gpu-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #09090b;
+  border: 1.5px solid #27272a;
+  border-radius: 8px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.08);
+  padding: 4px 6px;
+}
+
+.ghost-gpu-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+}
+
+.ghost-gpu-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #18181b;
+  color: #f4f4f5;
+  border: 1px solid #3f3f46;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  line-height: 1;
+}
+
+.ghost-gpu-btn:hover {
+  background: #27272a;
+  border-color: #52525b;
+  color: #fff;
+  transform: scale(1.02);
+}
+
+.ghost-gpu-btn:active {
+  transform: scale(0.97);
+}
+
+.ghost-gpu-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ghost-gpu-status {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fafafa;
+  background: #18181b;
+  border: 1.5px solid #3f3f46;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.75);
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  animation: ghostPop 0.16s cubic-bezier(0.16, 1, 0.3, 1);
+  line-height: 1;
+}
+
+@keyframes ghostPop {
+  0% { transform: translateY(-4px) scale(0.95); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.ghost-gpu-status.show {
+  display: inline-flex;
+}
+
+.ghost-gpu-status svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+}
+
+/* Tier: Top 1% (Elite) */
+.ghost-gpu-status.elite {
+  color: #f5f3ff;
+  background: #4c1d95;
+  border: 1.5px solid #a855f7;
+  box-shadow: 0 0 12px rgba(168, 85, 247, 0.4);
+}
+
+/* Tier: Top 5% (Favorite) */
+.ghost-gpu-status.favorite {
+  color: #ecfdf5;
+  background: #064e3b;
+  border: 1.5px solid #10b981;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.3);
+}
+
+/* Tier: Top 15% (High Match) */
+.ghost-gpu-status.high {
+  color: #ecfeff;
+  background: #155e75;
+  border: 1.5px solid #06b6d4;
+}
+
+/* Tier: Top 50% (Approved) */
+.ghost-gpu-status.approved {
+  color: #f1f5f9;
+  background: #1e293b;
+  border: 1.5px solid #64748b;
+}
+
+/* Tier: Below Threshold (Rejected) */
+.ghost-gpu-status.reject {
+  color: #fff1f2;
+  background: #881337;
+  border: 1.5px solid #f43f5e;
+}
+
+.ghost-gpu-status.exists {
+  color: #eff6ff;
+  background: #1e3a5f;
+  border: 1.5px solid #3b82f6;
+}
+
+.ghost-gpu-status.error {
+  color: #fef2f2;
+  background: #7f1d1d;
+  border: 1.5px solid #ef4444;
+}
+
+.ghost-gpu-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fafafa;
+  background: #18181b;
+  border: 1.5px solid #3f3f46;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.8);
+  z-index: 2147483647;
+  pointer-events: none;
+  animation: ghostPop 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.ghost-gpu-toast svg {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+}
+
+.ghost-gpu-toast.elite {
+  color: #f5f3ff;
+  background: #4c1d95;
+  border-color: #a855f7;
+  box-shadow: 0 0 20px rgba(168, 85, 247, 0.5);
+}
+
+.ghost-gpu-toast.favorite {
+  color: #ecfdf5;
+  background: #064e3b;
+  border-color: #10b981;
+  box-shadow: 0 0 16px rgba(16, 185, 129, 0.4);
+}
+
+.ghost-gpu-toast.high {
+  color: #ecfeff;
+  background: #155e75;
+  border-color: #06b6d4;
+}
+
+.ghost-gpu-toast.approved {
+  color: #f1f5f9;
+  background: #1e293b;
+  border-color: #64748b;
+}
+
+.ghost-gpu-toast.reject {
+  color: #fff1f2;
+  background: #881337;
+  border-color: #f43f5e;
+}
+
+.ghost-gpu-toast.exists {
+  color: #eff6ff;
+  background: #1e3a5f;
+  border-color: #3b82f6;
+}
+
+.ghost-gpu-toast.error {
+  color: #fef2f2;
+  background: #7f1d1d;
+  border-color: #ef4444;
+}

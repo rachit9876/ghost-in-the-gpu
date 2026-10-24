@@ -1,0 +1,1222 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+<title>Ghost in the GPU // Active Learner</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
+<style>
+  :root {
+    --bg: #FFF7E6;
+    --panel: #FFFFFF;
+    --panel-2: #FFFCF0;
+    --ink: #111111;
+    --text: #111111;
+    --muted: #5C5C5C;
+    --like: #2EE6A0;
+    --dislike: #FF5470;
+    --accent: #C8FF3D;
+    --radius: 12px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  html, body {
+    height: 100vh;
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(17,17,17,.08) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    color: var(--text);
+    font-family: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Monaco, Consolas, monospace;
+    overflow: hidden;
+    user-select: none;
+    display: flex;
+    flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Compact Neo-Brutalist Header */
+  header {
+    background: var(--panel);
+    border-bottom: 3px solid var(--ink);
+    padding: 6px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+    gap: 10px;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--ink);
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+
+  .btn {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    padding: 3px 9px;
+    border-radius: 7px;
+    font-size: 11px;
+    font-weight: 800;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: transform 0.08s, box-shadow 0.08s;
+  }
+
+  .btn:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .btn:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+
+  .btn-accent {
+    background: var(--accent);
+  }
+
+  .controls {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    font-weight: 700;
+  }
+
+  .ctrl-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--panel-2);
+    border: 2px solid var(--ink);
+    border-radius: 7px;
+    padding: 2px 6px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .ctrl-pill label {
+    font-size: 10px;
+    text-transform: uppercase;
+    color: var(--muted);
+    letter-spacing: .05em;
+  }
+
+  .ctrl-pill select {
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--ink);
+    outline: none;
+    cursor: pointer;
+  }
+
+  #stats {
+    font-size: 11px;
+    font-weight: 800;
+    color: var(--ink);
+    background: #EAF8D0;
+    border: 2px solid var(--ink);
+    padding: 3px 8px;
+    border-radius: 7px;
+    box-shadow: 2px 2px 0 var(--ink);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+
+  /* Maximized Grid Layout */
+  main#grid {
+    flex: 1;
+    display: flex;
+    gap: 12px;
+    padding: 10px;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+  }
+
+  .card {
+    flex: 1 1 0;
+    height: 100%;
+    min-width: 0;
+    max-width: 100%;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: default;
+    border-radius: var(--radius);
+    background: #111116;
+    border: 3px solid var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: transform 0.12s ease, box-shadow 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
+    overflow: hidden;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .card:hover, .card.preview-hover {
+    border-color: #000;
+    box-shadow: 6px 6px 0 var(--ink);
+    transform: scale(1.008) translate(-1px, -1px);
+  }
+
+  .card.dimmed {
+    opacity: 0.22;
+    filter: grayscale(0.85);
+    transform: scale(0.98);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+
+  .card.picked {
+    border-color: var(--like) !important;
+    box-shadow: 0 0 0 4px var(--like), 6px 6px 0 var(--ink) !important;
+    transform: scale(1.015);
+  }
+
+  .card img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+    border-radius: calc(var(--radius) - 3px);
+    pointer-events: auto;
+    user-select: none;
+    -webkit-user-drag: none;
+  }
+
+  .badge {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 28px;
+    height: 28px;
+    background: var(--panel);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    border-radius: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 900;
+    z-index: 5;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Compact Footer */
+  footer {
+    background: var(--panel);
+    border-top: 2px solid var(--ink);
+    padding: 4px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--muted);
+    flex-shrink: 0;
+  }
+
+  kbd {
+    background: var(--panel-2);
+    color: var(--ink);
+    border: 1px solid var(--ink);
+    box-shadow: 1px 1px 0 var(--ink);
+    border-radius: 4px;
+    padding: 1px 4px;
+    font-family: inherit;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .status-msg {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 800;
+  }
+
+  .spinner {
+    width: 28px;
+    height: 28px;
+    border: 4px solid var(--panel-2);
+    border-top-color: var(--ink);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .key-toast {
+    position: fixed;
+    bottom: 38px;
+    left: 50%;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--ink);
+    color: var(--accent);
+    border: 3px solid var(--accent);
+    box-shadow: 4px 4px 0 rgba(0,0,0,0.4);
+    border-radius: 9px;
+    padding: 10px 18px;
+    font-size: 13px;
+    font-weight: 900;
+    letter-spacing: .02em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.15s ease, transform 0.15s ease;
+  }
+
+  .key-toast.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  .key-toast kbd {
+    background: var(--accent);
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    box-shadow: 1px 1px 0 var(--ink);
+    padding: 2px 6px;
+    font-size: 12px;
+  }
+
+  @keyframes cardWiggle {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-4px); }
+    75% { transform: translateX(4px); }
+  }
+
+  .card.shake {
+    animation: cardWiggle 0.22s ease-in-out;
+  }
+
+  /* 🪞 Mirror Mode Toolbar Pill & Modal */
+  .mirror-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #E8F4F8;
+    border: 2px solid var(--ink);
+    border-radius: 7px;
+    padding: 2px 7px;
+    box-shadow: 2px 2px 0 var(--ink);
+    font-size: 11px;
+    font-weight: 800;
+    user-select: none;
+  }
+
+  .mirror-pill.off {
+    background: var(--panel-2);
+    opacity: 0.8;
+  }
+
+  .mirror-switch {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 16px;
+  }
+
+  .mirror-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+
+  .mirror-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: #cbd5e1;
+    transition: .15s;
+    border-radius: 16px;
+    border: 1.5px solid var(--ink);
+  }
+
+  .mirror-slider:before {
+    position: absolute;
+    content: "";
+    height: 10px;
+    width: 10px;
+    left: 1px;
+    bottom: 1px;
+    background-color: var(--ink);
+    transition: .15s;
+    border-radius: 50%;
+  }
+
+  .mirror-switch input:checked + .mirror-slider {
+    background-color: var(--accent);
+  }
+
+  .mirror-switch input:checked + .mirror-slider:before {
+    transform: translateX(12px);
+  }
+
+  .mirror-stats-btn {
+    background: transparent;
+    border: none;
+    font-size: 11px;
+    font-weight: 900;
+    cursor: pointer;
+    padding: 0;
+    color: var(--ink);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .mirror-modal-backdrop {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 2000;
+  }
+
+  .mirror-modal-backdrop.open {
+    display: flex;
+  }
+
+  .mirror-modal {
+    background: var(--panel);
+    border: 3px solid var(--ink);
+    box-shadow: 6px 6px 0 var(--ink);
+    border-radius: 12px;
+    width: 520px;
+    max-width: 90vw;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .mirror-modal-header {
+    background: #E8F4F8;
+    border-bottom: 2px solid var(--ink);
+    padding: 10px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 900;
+    font-size: 13px;
+  }
+
+  .mirror-modal-body {
+    padding: 16px;
+    overflow-y: auto;
+    font-size: 12px;
+    font-weight: 700;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mirror-kpi-row {
+    display: flex;
+    gap: 10px;
+  }
+
+  .mirror-kpi-card {
+    flex: 1;
+    background: var(--panel-2);
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+  }
+
+  .mirror-kpi-val {
+    font-size: 18px;
+    font-weight: 900;
+    color: var(--ink);
+    margin-top: 2px;
+  }
+
+  .mirror-subtable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    margin-top: 6px;
+  }
+
+  .mirror-subtable th, .mirror-subtable td {
+    border: 1px solid var(--ink);
+    padding: 4px 8px;
+    text-align: left;
+  }
+
+  .mirror-subtable th {
+    background: var(--panel-2);
+    font-weight: 900;
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="header-left">
+    <a href="/" class="btn">🏠 Hub</a>
+    <a href="/domain" id="workspaceLinkBtn" class="btn">📂 Workspace</a>
+    <a href="/flex" id="flexLinkBtn" class="btn btn-accent">⚡ Flex Sort</a>
+    <button id="trainBtn" class="btn" style="background:#2EE6A0;">🧠 Train Ghost</button>
+  </div>
+  <div class="controls">
+    <div class="ctrl-pill">
+      <label>Domain:</label>
+      <select id="domainSel"></select>
+    </div>
+    <div class="ctrl-pill">
+      <label>Mode:</label>
+      <select id="modeSel">
+        <option value="active">Active Exploration</option>
+        <option value="elite">👑 Elite Boss Battles</option>
+        <option value="top_bracket">🎯 Top Bracket</option>
+        <option value="contrastive">🧬 Contrastive Twins</option>
+      </select>
+    </div>
+    <div class="ctrl-pill">
+      <label>Group:</label>
+      <select id="size">
+        <option value="2">2</option>
+        <option value="3" selected>3</option>
+        <option value="5">5</option>
+      </select>
+    </div>
+    <div class="mirror-pill" id="mirrorPill" title="Test-Retest Consistency Injector">
+      <span>🪞 Mirror:</span>
+      <button class="mirror-stats-btn" id="mirrorStatsBtn" title="View Agreement & Consistency Stats">OFF (n=0)</button>
+      <label class="mirror-switch" title="Toggle Mirror Mode">
+        <input type="checkbox" id="mirrorToggle">
+        <span class="mirror-slider"></span>
+      </label>
+    </div>
+    <button id="undoBtn" class="btn" style="display:none;" title="Undo last choice (Z)">↩ Undo</button>
+    <span id="stats">loading stats...</span>
+  </div>
+</header>
+
+<main id="grid">
+  <div class="status-msg">
+    <div class="spinner"></div>
+    <span>Loading images...</span>
+  </div>
+</main>
+
+<!-- Mirror Stats Modal -->
+<div class="mirror-modal-backdrop" id="mirrorModal">
+  <div class="mirror-modal">
+    <div class="mirror-modal-header">
+      <span>🪞 Mirror Mode — Test-Retest Consistency Stats</span>
+      <button class="btn" id="closeMirrorModalBtn" style="padding:2px 8px;">✕</button>
+    </div>
+    <div class="mirror-modal-body" id="mirrorModalBody">
+      <div style="text-align:center; padding:20px; color:#666;">Loading consistency statistics...</div>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>Press number keys <kbd>1</kbd> - <kbd>5</kbd> on keyboard to select favorite</span>
+  <span><kbd>Space</kbd> / <kbd>S</kbd> Skip · <kbd>Z</kbd> Undo · <kbd>R</kbd> Reload</span>
+</footer>
+
+<div class="key-toast" id="keyToast">
+  <span>⌨️ Use number keys <kbd>1</kbd> - <kbd id="keyToastMax">3</kbd> to rate!</span>
+</div>
+
+<script>
+(() => {
+  const grid = document.getElementById('grid');
+  const sizeSel = document.getElementById('size');
+  const modeSel = document.getElementById('modeSel');
+  const domainSel = document.getElementById('domainSel');
+  const workspaceLinkBtn = document.getElementById('workspaceLinkBtn');
+  const flexLinkBtn = document.getElementById('flexLinkBtn');
+  const trainBtn = document.getElementById('trainBtn');
+  const statsEl = document.getElementById('stats');
+  const undoBtn = document.getElementById('undoBtn');
+
+  const urlParams = new URLSearchParams(location.search);
+  const _parsedDomainId = parseInt(urlParams.get('domain_id') || sessionStorage.getItem('ghost_domain_id') || '1', 10);
+  let activeDomainId = Number.isFinite(_parsedDomainId) && _parsedDomainId > 0 ? _parsedDomainId : 1;
+  sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+
+  function syncNavLinks() {
+    if (workspaceLinkBtn) workspaceLinkBtn.href = `/domain?id=${activeDomainId}`;
+    if (flexLinkBtn) flexLinkBtn.href = `/flex?domain_id=${activeDomainId}`;
+  }
+  syncNavLinks();
+
+  async function initDomains() {
+    try {
+      const res = await fetch('/api/domains');
+      if (!res.ok) throw new Error(`Server returned ${res.status}`);
+      const d = await res.json();
+      if (!d.ok) throw new Error(d.detail || 'Failed to load domains');
+      domainSel.innerHTML = '';
+      for (const dom of d.domains) {
+        const opt = document.createElement('option');
+        opt.value = dom.id;
+        opt.textContent = dom.name;
+        if (dom.id === activeDomainId) opt.selected = true;
+        domainSel.appendChild(opt);
+      }
+      domainSel.onchange = () => {
+        activeDomainId = parseInt(domainSel.value, 10);
+        sessionStorage.setItem('ghost_domain_id', String(activeDomainId));
+        syncNavLinks();
+        updateMirrorIndicator();
+        prefetchQueue.length = 0;
+        next(true);
+      };
+    } catch (err) {
+      console.warn('Failed to load domains:', err);
+      domainSel.innerHTML = '<option value="1">Failed to load</option>';
+    }
+  }
+  initDomains();
+  updateMirrorIndicator();
+
+  if (trainBtn) {
+    trainBtn.onclick = async () => {
+      trainBtn.disabled = true;
+      trainBtn.textContent = '⏳ Launching...';
+      try {
+        const res = await fetch('/api/train', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ domain_id: activeDomainId })
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Failed to start tournament');
+        alert('🚀 Training tournament launched in a separate terminal window!\nYou can keep rating while it trains.');
+      } catch (e) {
+        alert(e.message);
+      } finally {
+        setTimeout(() => {
+          trainBtn.disabled = false;
+          trainBtn.textContent = '🧠 Train Ghost';
+        }, 3000);
+      }
+    };
+  }
+
+  // Load user saved group size and mode preference safely
+  try {
+    const savedSize = localStorage.getItem('ghost_size');
+    if (savedSize && ['2', '3', '5'].includes(savedSize)) {
+      sizeSel.value = savedSize;
+    }
+    const savedMode = localStorage.getItem('ghost_mode');
+    if (savedMode && modeSel && ['active', 'elite', 'top_bracket', 'contrastive'].includes(savedMode)) {
+      modeSel.value = savedMode;
+    }
+  } catch (_) {}
+
+  // 🪞 Mirror Mode Wiring
+  const mirrorPill = document.getElementById('mirrorPill');
+  const mirrorToggle = document.getElementById('mirrorToggle');
+  const mirrorStatsBtn = document.getElementById('mirrorStatsBtn');
+  const mirrorModal = document.getElementById('mirrorModal');
+  const mirrorModalBody = document.getElementById('mirrorModalBody');
+  const closeMirrorModalBtn = document.getElementById('closeMirrorModalBtn');
+
+  try {
+    const savedMirror = localStorage.getItem('ghost_mirror_active');
+    if (savedMirror !== null && mirrorToggle) {
+      mirrorToggle.checked = (savedMirror === '1');
+    }
+  } catch (_) {}
+
+  async function updateMirrorIndicator() {
+    try {
+      const res = await fetch(`/api/mirror/stats?domain_id=${activeDomainId}`);
+      if (!res.ok) return;
+      const d = await res.json();
+      const n = d.n_retested || 0;
+      const isOn = mirrorToggle && mirrorToggle.checked;
+      if (mirrorPill) {
+        if (isOn) mirrorPill.classList.remove('off');
+        else mirrorPill.classList.add('off');
+      }
+      if (mirrorStatsBtn) {
+        mirrorStatsBtn.textContent = `${isOn ? 'ON' : 'OFF'} (n=${n})`;
+        if (isOn && n > 0) {
+          mirrorStatsBtn.title = `Agreement: ${d.overall_agreement_pct}% (95% CI: ${d.wilson_95_ci.low}% - ${d.wilson_95_ci.high}%)`;
+        }
+      }
+    } catch (_) {}
+  }
+
+  if (mirrorToggle) {
+    mirrorToggle.onchange = () => {
+      try {
+        localStorage.setItem('ghost_mirror_active', mirrorToggle.checked ? '1' : '0');
+      } catch (_) {}
+      updateMirrorIndicator();
+      prefetchQueue.length = 0; // Clear prefetch queue to immediately reflect mirror switch
+    };
+  }
+
+  if (mirrorStatsBtn) {
+    mirrorStatsBtn.onclick = async () => {
+      if (mirrorModal) mirrorModal.classList.add('open');
+      if (mirrorModalBody) mirrorModalBody.innerHTML = '<div style="text-align:center; padding:20px; color:#666;">Calculating consistency & Wilson confidence interval...</div>';
+      try {
+        const res = await fetch(`/api/mirror/stats?domain_id=${activeDomainId}`);
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        const d = await res.json();
+        if (!d.ok) throw new Error('Failed to load mirror stats');
+
+        const n = d.n_retested;
+        const agrPct = d.overall_agreement_pct;
+        const ci = d.wilson_95_ci;
+
+        let breakdownHtml = '';
+        if (d.sampler_breakdown && Object.keys(d.sampler_breakdown).length > 0) {
+          breakdownHtml = `
+            <div style="margin-top:10px;">
+              <div style="font-weight:900; margin-bottom:4px;">Original Sampler Breakdown:</div>
+              <table class="mirror-subtable">
+                <thead><tr><th>Sampler</th><th>Retests</th><th>Agreed</th><th>Agreement %</th></tr></thead>
+                <tbody>
+                  ${Object.entries(d.sampler_breakdown).map(([smp, stats]) => `
+                    <tr>
+                      <td><b>${smp}</b></td>
+                      <td>${stats.total}</td>
+                      <td>${stats.agreed}</td>
+                      <td><b>${stats.agreement_pct}%</b></td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        let recentHtml = '';
+        if (d.recent_retests && d.recent_retests.length > 0) {
+          recentHtml = `
+            <div style="margin-top:10px;">
+              <div style="font-weight:900; margin-bottom:4px;">Recent Test-Retest Audit Trail:</div>
+              <table class="mirror-subtable">
+                <thead><tr><th>Date</th><th>Orig ID</th><th>Result</th><th>Orig Winner</th><th>Retest Winner</th></tr></thead>
+                <tbody>
+                  ${d.recent_retests.map(r => `
+                    <tr>
+                      <td style="color:#666;">${r.date}</td>
+                      <td>#${r.original_id}</td>
+                      <td>${r.agreed ? '<span style="color:#10b981;font-weight:900;">✓ Agreed</span>' : '<span style="color:#ef4444;font-weight:900;">⚡ Flipped</span>'}</td>
+                      <td>Img #${r.winner_orig}</td>
+                      <td>Img #${r.winner_retest}</td>
+                    </tr>
+                  `).join('')}
+                </tbody>
+              </table>
+            </div>
+          `;
+        }
+
+        mirrorModalBody.innerHTML = `
+          <div class="mirror-kpi-row">
+            <div class="mirror-kpi-card">
+              <div style="font-size:10px; color:#666; text-transform:uppercase;">Retests (n)</div>
+              <div class="mirror-kpi-val">${n}</div>
+            </div>
+            <div class="mirror-kpi-card" style="background:#EAF8D0;">
+              <div style="font-size:10px; color:#666; text-transform:uppercase;">Overall Agreement</div>
+              <div class="mirror-kpi-val">${n > 0 ? agrPct + '%' : 'N/A'}</div>
+            </div>
+            <div class="mirror-kpi-card" style="background:#FFEFCB;">
+              <div style="font-size:10px; color:#666; text-transform:uppercase;">Wilson 95% CI</div>
+              <div class="mirror-kpi-val" style="font-size:13px; margin-top:5px;">
+                ${n > 0 ? `[${ci.low}%, ${ci.high}%]` : 'N/A'}
+              </div>
+            </div>
+          </div>
+          <p style="font-size:11px; color:#555; line-height:1.4; margin:0;">
+            <b>Test-Retest Reliability:</b> Injects identical historical comparisons (&ge;48h old) at a ~20% rate. Retest ratings are isolated from training, and pairs with high flip rates are automatically downweighted in classifier training to neutralize human noise.
+          </p>
+          ${breakdownHtml}
+          ${recentHtml}
+        `;
+      } catch (err) {
+        mirrorModalBody.innerHTML = `<div style="color:#ef4444; text-align:center;">Failed to load statistics: ${err.message}</div>`;
+      }
+    };
+  }
+
+  if (closeMirrorModalBtn) {
+    closeMirrorModalBtn.onclick = () => {
+      if (mirrorModal) mirrorModal.classList.remove('open');
+    };
+  }
+
+  if (mirrorModal) {
+    mirrorModal.onclick = (e) => {
+      if (e.target === mirrorModal) mirrorModal.classList.remove('open');
+    };
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && mirrorModal.classList.contains('open')) {
+        mirrorModal.classList.remove('open');
+      }
+    });
+  }
+
+  let current = { ids: [], strategy: null, size: parseInt(sizeSel.value, 10), version: 0 };
+  let busy = false;
+  let undoHistory = [];
+  let heldNumber = null;
+  const prefetchQueue = [];
+
+  let _saveErrorUntil = 0;
+  function setStats(text) {
+    if (!statsEl) return;
+    // Don't overwrite an active save-error message
+    if (Date.now() < _saveErrorUntil) return;
+    statsEl.textContent = text;
+  }
+
+  async function updateStats() {
+    try {
+      const res = await fetch(`/api/stats?domain_id=${activeDomainId}`);
+      if (!res.ok) return;
+      const s = await res.json();
+      setStats(`${s.total_comparisons} comparisons · ${s.total_corpus} images`);
+    } catch (_) {
+      setStats('stats offline');
+    }
+  }
+
+  const _preloadCache = new Set();
+  function preload(ids) {
+    if (!ids) return;
+    for (const id of ids) {
+      if (_preloadCache.has(id)) continue;
+      _preloadCache.add(id);
+      const img = new Image();
+      img.src = `/api/image/${id}`;
+    }
+    // Bound cache to prevent memory growth in long sessions
+    if (_preloadCache.size > 800) {
+      const arr = [..._preloadCache];
+      for (let i = 0; i < 400; i++) _preloadCache.delete(arr[i]);
+    }
+  }
+
+  async function fetchGroup(sz) {
+    const md = modeSel ? modeSel.value : 'active';
+    const isMirrorOn = mirrorToggle && mirrorToggle.checked ? 1 : 0;
+    const res = await fetch(`/api/next?domain_id=${activeDomainId}&size=${sz}&mode=${md}&mirror=${isMirrorOn}`);
+    if (!res.ok) {
+      const errData = await res.json().catch(() => ({}));
+      throw new Error(errData.detail || `HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    if (data.strategy === 'contrastive_empty') {
+      return data;
+    }
+    if (!data.image_ids || !data.image_ids.length) throw new Error('No images returned');
+    preload(data.image_ids);
+    return data;
+  }
+
+  let fetchingPrefetch = false;
+  async function fillPrefetch() {
+    if (fetchingPrefetch) return;
+    fetchingPrefetch = true;
+    const sz = parseInt(sizeSel.value, 10);
+    const needed = Math.min(2, 3 - prefetchQueue.length);
+    for (let i = 0; i < needed; i++) {
+      try {
+        const item = await fetchGroup(sz);
+        if (item && item.image_ids) prefetchQueue.push(item);
+      } catch (_) {
+        break;
+      }
+    }
+    fetchingPrefetch = false;
+  }
+
+  function render(ids) {
+    grid.innerHTML = '';
+    ids.forEach((id, idx) => {
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.dataset.id = id;
+      card.dataset.idx = idx;
+
+      const badge = document.createElement('div');
+      badge.className = 'badge';
+      badge.textContent = idx + 1;
+      card.appendChild(badge);
+
+      const img = document.createElement('img');
+      img.src = `/api/image/${id}`;
+      img.alt = `image ${id}`;
+      img.loading = 'eager';
+      img.decoding = 'async';
+      img.onerror = () => {
+        card.innerHTML = `<span style="color:#ef4444;font-size:12px;">Failed #${id}</span>`;
+      };
+      card.appendChild(img);
+
+      card.onclick = (e) => {
+        e.preventDefault();
+        showKeyNotice(card, idx + 1);
+      };
+      card.oncontextmenu = (e) => {
+        e.stopPropagation(); // Allow native browser context menu (Save image, Copy image address, etc.)
+      };
+      grid.appendChild(card);
+    });
+  }
+
+  let toastTimer = null;
+  function showKeyNotice(cardEl, keyNumber) {
+    if (cardEl) {
+      cardEl.classList.remove('shake');
+      void cardEl.offsetWidth; // re-trigger animation
+      cardEl.classList.add('shake');
+    }
+    const toast = document.getElementById('keyToast');
+    const maxEl = document.getElementById('keyToastMax');
+    if (toast) {
+      const maxKey = current.ids ? current.ids.length : 3;
+      if (maxEl) maxEl.textContent = String(maxKey);
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        toast.classList.remove('show');
+      }, 2200);
+    }
+  }
+
+  async function next(force = false, clearPrefetch = false) {
+    if (busy && !force) return;
+    busy = true;
+
+    if (clearPrefetch) prefetchQueue.length = 0;
+    const sz = parseInt(sizeSel.value, 10);
+
+    let data = null;
+    while (prefetchQueue.length > 0) {
+      const item = prefetchQueue.shift();
+      if (item && item.size === sz && item.image_ids && item.image_ids.length > 0) {
+        data = item;
+        break;
+      }
+    }
+
+    if (!data) {
+      if (!grid.querySelector('.card')) {
+        grid.innerHTML = '<div class="status-msg"><div class="spinner"></div><span>Loading images...</span></div>';
+      }
+      try {
+        data = await fetchGroup(sz);
+      } catch (err) {
+        grid.innerHTML = `<div class="status-msg" style="color:#ef4444;"><p>Error: ${err.message}</p><button class="btn" style="margin-top:10px;" onclick="window.ghostNext(true)">Retry (R)</button></div>`;
+        busy = false;
+        return;
+      }
+    }
+
+    if (data.strategy === 'contrastive_empty') {
+      grid.innerHTML = `
+        <div class="status-msg" style="max-width: 440px; text-align: center; background: var(--panel); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); padding: 24px; border-radius: 8px;">
+          <div style="font-size: 28px; margin-bottom: 8px;">🧬</div>
+          <div style="font-size: 14px; font-weight: 900; margin-bottom: 8px; text-transform: uppercase;">Contrastive Pairs Exhausted</div>
+          <p style="font-size: 12px; font-weight: 700; opacity: 0.8; margin-bottom: 16px;">
+            ${data.msg || "You have explored all high-divergence lookalike pairs for this domain."}
+          </p>
+          <div style="display:flex; gap:8px; justify-content:center;">
+            <button class="btn primary" onclick="document.getElementById('modeSel').value='active'; document.getElementById('modeSel').dispatchEvent(new Event('change'));">Switch to Active Mode</button>
+            <button class="btn" onclick="document.getElementById('modeSel').value='elite'; document.getElementById('modeSel').dispatchEvent(new Event('change'));">👑 Elite Boss Battles</button>
+          </div>
+        </div>
+      `;
+      busy = false;
+      updateStats();
+      return;
+    }
+
+    current = {
+      ids: data.image_ids,
+      strategy: data.strategy,
+      size: sz,
+      version: current.version + 1,
+      is_retest: data.is_retest || 0,
+      retest_of: data.retest_of || null
+    };
+    render(current.ids);
+    busy = false;
+    fillPrefetch();
+    updateStats();
+  }
+  window.ghostNext = next;
+
+  let _validKeyToken = null;
+
+  async function choose(winnerId, cardEl, token) {
+    if (token !== _validKeyToken) {
+      console.warn('[Ghost] Direct click / script invocation rejected. Please press number keys (1-5).');
+      return;
+    }
+    _validKeyToken = null;
+    if (busy) return;
+    busy = true;
+
+    if (cardEl) {
+      cardEl.classList.add('picked');
+      grid.querySelectorAll('.card').forEach(c => {
+        if (c !== cardEl) c.classList.add('dimmed');
+      });
+    }
+
+    // Save comparison in background (non-blocking for 60-120fps fluid rating)
+    const payload = {
+      domain_id: activeDomainId,
+      winner_id: winnerId,
+      shown_order: [...current.ids],
+      sampler: current.strategy || 'unknown',
+      is_retest: current.is_retest || 0,
+      retest_of: current.retest_of || null
+    };
+    // B6: track save status so undo never deletes an unrelated comparison.
+    // If the save fails and the user presses Z (per "press Z to retry"),
+    // the undo path restores the group locally WITHOUT calling /api/undo,
+    // which would otherwise delete the previous valid comparison.
+    const _histEntry = {
+      ids: [...current.ids],
+      strategy: current.strategy,
+      size: current.size,
+      is_retest: current.is_retest || 0,
+      retest_of: current.retest_of || null,
+      status: 'pending',
+    };
+    undoHistory.push(_histEntry);
+    if (undoHistory.length > 20) undoHistory.shift();
+    if (undoBtn) undoBtn.style.display = 'inline-flex';
+
+    fetch('/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then((r) => {
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      _histEntry.status = 'saved';
+      if (payload.is_retest) updateMirrorIndicator();
+    }).catch(e => {
+      console.error('Failed to save comparison:', e);
+      _histEntry.status = 'failed';
+      if (statsEl) {
+        const origBg = statsEl.style.background;
+        _saveErrorUntil = Date.now() + 3500;
+        statsEl.textContent = '⚠️ Save failed — press Z to retry';
+        statsEl.style.background = '#FFE9ED';
+        setTimeout(() => {
+          _saveErrorUntil = 0;
+          statsEl.style.background = origBg;
+          updateStats();
+        }, 3500);
+      }
+    });
+
+    // Instant smooth transition to next preloaded group (same speed as skipping!)
+    setTimeout(() => {
+      next(true);
+    }, 60);
+  }
+
+  async function undo() {
+    if (busy || undoHistory.length === 0) return;
+    busy = true;
+
+    try {
+      const last = undoHistory[undoHistory.length - 1];
+
+      // If save is still in flight, wait up to 2s for it to resolve.
+      if (last.status === 'pending') {
+        const deadline = Date.now() + 2000;
+        while (last.status === 'pending' && Date.now() < deadline) {
+          await new Promise(r => setTimeout(r, 40));
+        }
+      }
+
+      if (last.status === 'saved') {
+        // Normal path — undo the saved comparison on the server.
+        const res = await fetch(`/api/undo?domain_id=${activeDomainId}`, { method: 'POST' });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || !data.ok) {
+          // Server refused (e.g. nothing to undo). Don't pop — that would
+          // desync client and server state.
+          console.warn('Server undo message:', data.msg || `HTTP ${res.status}`);
+          busy = false;
+          return;
+        }
+      } else {
+        // 'failed' or indeterminate — the save never landed, so there is
+        // nothing to undo on the server. Just restore UI locally. This is
+        // the fix for the data-loss bug: pressing Z on a failed save
+        // used to delete the previous valid comparison.
+        console.warn('Undo on non-saved entry (' + last.status + ') — restoring locally, no /api/undo call');
+      }
+
+      undoHistory.pop();
+      if (undoBtn) undoBtn.style.display = undoHistory.length > 0 ? 'inline-flex' : 'none';
+
+      if (sizeSel && sizeSel.value !== String(last.size)) {
+        sizeSel.value = String(last.size);
+      }
+      // Preserve retest fields so re-rating keeps the retest status
+      current = {
+        ids: [...last.ids],
+        strategy: last.strategy,
+        size: last.size,
+        is_retest: last.is_retest || 0,
+        retest_of: last.retest_of || null,
+      };
+      prefetchQueue.length = 0;
+      render(current.ids);
+      fillPrefetch();
+    } catch (err) {
+      console.error('Undo error:', err);
+    } finally {
+      busy = false;
+      updateStats();
+    }
+  }
+
+  function clearPreview() {
+    if (heldNumber !== null) {
+      heldNumber = null;
+      grid.querySelectorAll('.card').forEach(c => c.classList.remove('preview-hover'));
+    }
+  }
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+    const k = e.key.toLowerCase();
+
+    if (e.key === 'Escape') {
+      clearPreview();
+      return;
+    }
+
+    // Number keys (standard or numpad)
+    let n = parseInt(e.key, 10);
+    if (isNaN(n) && e.code && e.code.startsWith('Numpad')) {
+      n = parseInt(e.code.replace('Numpad', ''), 10);
+    }
+
+    if (!isNaN(n) && n >= 1 && n <= current.ids.length) {
+      e.preventDefault();
+      if (e.repeat) return;
+      heldNumber = n;
+      const cards = grid.querySelectorAll('.card');
+      cards.forEach((c, idx) => c.classList.toggle('preview-hover', idx === n - 1));
+      return;
+    }
+
+    if (k === 's' || k === ' ' || e.code === 'NumpadDecimal') {
+      e.preventDefault();
+      clearPreview();
+      next(false);
+    } else if (k === 'z' || (e.ctrlKey && k === 'z')) {
+      e.preventDefault();
+      clearPreview();
+      undo();
+    } else if (k === 'r') {
+      e.preventDefault();
+      clearPreview();
+      next(true);
+    }
+  });
+
+  document.addEventListener('keyup', (e) => {
+    if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT')) return;
+    if (heldNumber !== null) {
+      let n = parseInt(e.key, 10);
+      if (isNaN(n) && e.code && e.code.startsWith('Numpad')) {
+        n = parseInt(e.code.replace('Numpad', ''), 10);
+      }
+      if (n === heldNumber) {
+        e.preventDefault();
+        const pickIdx = heldNumber - 1;
+        clearPreview();
+        const cards = grid.querySelectorAll('.card');
+        if (cards[pickIdx] && current.ids[pickIdx]) {
+          _validKeyToken = Math.random().toString(36).substring(2);
+          choose(current.ids[pickIdx], cards[pickIdx], _validKeyToken);
+        }
+      }
+    }
+  });
+
+  window.addEventListener('blur', clearPreview);
+
+  sizeSel.onchange = () => {
+    try { localStorage.setItem('ghost_size', sizeSel.value); } catch (_) {}
+    undoHistory.length = 0;
+    if (undoBtn) undoBtn.style.display = 'none';
+    prefetchQueue.length = 0;
+    next(true);
+  };
+
+  if (modeSel) {
+    modeSel.onchange = () => {
+      try { localStorage.setItem('ghost_mode', modeSel.value); } catch (_) {}
+      undoHistory.length = 0;
+      if (undoBtn) undoBtn.style.display = 'none';
+      prefetchQueue.length = 0;
+      next(true);
+    };
+  }
+
+  if (undoBtn) undoBtn.onclick = () => undo();
+
+  next();
+})();
+</script>
+</body>
+</html>

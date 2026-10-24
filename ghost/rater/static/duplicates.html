@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ghost in the GPU // Duplicate Cleaner</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<style>
+  :root {
+    --bg: #FFF7E6;
+    --ink: #111111;
+    --muted: #5A5243;
+    --card: #FFFFFF;
+    --accent: #C8FF3D;
+    --like: #2EE6A0;
+    --dislike: #FF4D6D;
+    --violet: #A78BFA;
+    --amber: #FFD84D;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(17,17,17,.11) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 3px solid var(--ink);
+    padding: 10px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .nav-left, .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .domain-badge {
+    background: var(--accent);
+    border: 2.5px solid var(--ink);
+    border-radius: 9px;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .btn {
+    background: #fff;
+    color: var(--ink);
+    border: 2.5px solid var(--ink);
+    border-radius: 9px;
+    padding: 7px 13px;
+    font-size: 11px;
+    font-weight: 900;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform .1s ease, box-shadow .1s ease, background .12s ease;
+  }
+
+  .btn:hover:not(:disabled) {
+    background: var(--accent);
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+
+  .btn:disabled {
+    opacity: .5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary { background: var(--accent); }
+  .btn-like { background: var(--like); }
+  .btn-danger { background: var(--dislike); color: #fff; }
+  .btn-danger:hover:not(:disabled) { background: #ff2a50; color: #fff; }
+
+  .select-box {
+    border: 2.5px solid var(--ink);
+    border-radius: 9px;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 800;
+    background: var(--bg);
+    color: var(--ink);
+    cursor: pointer;
+  }
+
+  .workspace {
+    max-width: 1400px;
+    width: 100%;
+    margin: 0 auto;
+    padding: 20px 22px 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  /* Control Bar */
+  .toolbar {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 14px;
+    padding: 12px 16px;
+    box-shadow: 5px 5px 0 var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .stat-pill {
+    background: var(--bg);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 5px 10px;
+    font-size: 11px;
+    font-weight: 800;
+  }
+
+  .pair-card {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 14px;
+    box-shadow: 5px 5px 0 var(--ink);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    transition: transform .1s ease, box-shadow .1s ease;
+  }
+
+  .pair-header {
+    background: var(--bg);
+    border-bottom: 2.5px solid var(--ink);
+    padding: 10px 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+  }
+
+  .sim-badge {
+    background: var(--violet);
+    color: var(--ink);
+    border: 2px solid var(--ink);
+    border-radius: 6px;
+    padding: 3px 8px;
+    font-size: 11px;
+    font-weight: 900;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .pair-body {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    padding: 16px;
+  }
+
+  .img-slot {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    border: 2.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 12px;
+    background: #fff;
+  }
+
+  .img-slot.recommended {
+    background: #f2fef8;
+    border-color: #10b981;
+    box-shadow: 0 0 0 1.5px #10b981;
+  }
+
+  .img-preview {
+    width: 100%;
+    height: 360px;
+    background: #090a0f;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .img-preview img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+  }
+
+  .img-info {
+    font-size: 11.5px;
+    color: var(--muted);
+    font-weight: 600;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .img-info b { color: var(--ink); font-weight: 800; }
+
+  .empty-state {
+    padding: 60px 20px;
+    text-align: center;
+    color: var(--muted);
+    background: #fff;
+    border: 3px dashed var(--ink);
+    border-radius: 14px;
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav-left">
+    <a href="/domain" class="btn" id="backToDomainBtn">← Back to Gallery</a>
+    <div class="domain-badge" id="domainTitle">🧹 Duplicate Cleaner</div>
+    <span class="stat-pill" id="pairCountBadge">Found: 0 pairs</span>
+  </div>
+
+  <div class="nav-right">
+    <a class="btn" id="rateLinkBtn" href="/rate">⚖️ Rate Pairs</a>
+    <a class="btn btn-primary" id="flexLinkBtn" href="/flex">⚡ Launch Flex Sorter</a>
+  </div>
+</header>
+
+<main class="workspace">
+  <!-- Control Toolbar -->
+  <section class="toolbar">
+    <div style="display:flex; align-items:center; gap:12px; flex-wrap:wrap;">
+      <span style="font-size:11px; font-weight:900; text-transform:uppercase;">Similarity:</span>
+      <select class="select-box" id="threshSelect">
+        <option value="0.99">≥ 99% (Identical / Re-encoded only)</option>
+        <option value="0.98">≥ 98% (Extremely close)</option>
+        <option value="0.97" selected>≥ 97% (High confidence duplicates)</option>
+        <option value="0.95">≥ 95% (Near-duplicates / crops)</option>
+        <option value="0.92">≥ 92% (Loose lookalikes)</option>
+      </select>
+      <button class="btn btn-primary" id="scanBtn">🔄 Scan Now</button>
+    </div>
+
+    <div style="font-size:11.5px; color:var(--muted); font-weight:700; max-width:650px;">
+      💡 <b>Non-Contradictory Merge:</b> Keeping Image A and retiring Image B will reassign all of B's battle history directly to A, prune internal conflicts, and delete B's redundant file.
+    </div>
+  </section>
+
+  <!-- Duplicate Pairs List -->
+  <div id="pairsContainer" style="display:flex; flex-direction:column; gap:18px;">
+    <div class="empty-state">
+      <h3 style="font-size:16px; font-weight:900;">Click "Scan Now" to search for near-duplicates in this domain.</h3>
+    </div>
+  </div>
+</main>
+
+<script>
+const params = new URLSearchParams(location.search);
+const domainId = parseInt(params.get('domain_id') || params.get('id') || '1', 10);
+document.getElementById('backToDomainBtn').href = `/domain?id=${domainId}`;
+document.getElementById('rateLinkBtn').href = `/rate?domain_id=${domainId}`;
+document.getElementById('flexLinkBtn').href = `/flex?domain_id=${domainId}`;
+
+function formatBytes(bytes) {
+  if (!bytes) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+}
+
+async function loadDuplicates() {
+  const thresh = document.getElementById('threshSelect').value;
+  const container = document.getElementById('pairsContainer');
+  const countBadge = document.getElementById('pairCountBadge');
+  container.innerHTML = '<div class="empty-state"><h3 style="font-size:16px; font-weight:900;">🔍 Analyzing 1024D embedding space for near-duplicate clusters...</h3></div>';
+
+  try {
+    const res = await fetch(`/api/duplicates?domain_id=${domainId}&threshold=${thresh}&limit=100`);
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.detail || 'Failed to load duplicates');
+
+    countBadge.textContent = `Found: ${data.total_pairs_found} pair(s)`;
+    if (data.pairs.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <h2 style="font-size:18px; color:var(--like); font-weight:900;">🎉 No Duplicates Found!</h2>
+          <p style="margin-top:6px; font-size:12.5px; font-weight:700;">No two images in this domain exceed the ${(data.threshold * 100).toFixed(0)}% visual similarity threshold.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = '';
+    data.pairs.forEach((pair, idx) => {
+      const a = pair.image_a;
+      const b = pair.image_b;
+
+      const preferA = (a.file_size || 0) >= (b.file_size || 0);
+
+      const card = document.createElement('div');
+      card.className = 'pair-card';
+      card.id = `pair-row-${idx}`;
+      card.innerHTML = `
+        <div class="pair-header">
+          <div><b>Pair #${idx + 1}:</b> Image #${a.id} vs Image #${b.id}</div>
+          <div class="sim-badge">Cosine: ${(pair.similarity * 100).toFixed(2)}%</div>
+        </div>
+        <div class="pair-body">
+          <!-- Image A -->
+          <div class="img-slot ${preferA ? 'recommended' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:900; font-size:13px;">Image #${a.id}</span>
+              ${preferA ? '<span style="color:#059669; font-size:11px; font-weight:900;">★ Recommended (Higher Res/Size)</span>' : ''}
+            </div>
+            <div class="img-preview">
+              <img src="${a.url}" loading="lazy" />
+            </div>
+            <div class="img-info">
+              <div>Dimensions: <b>${a.dimensions || 'Unknown'}</b> | Size: <b>${formatBytes(a.file_size)}</b></div>
+              <div>Ghost Score: <b>${a.score !== null ? (a.score > 0 ? '+' : '') + a.score : 'N/A'}</b> | Battles: <b>${a.battles}</b> (Wins: ${a.wins})</div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:6px;">
+              <button class="btn btn-primary" style="flex:1;" onclick="mergePair(${a.id}, ${b.id}, 'pair-row-${idx}')">
+                ✅ Keep #${a.id} (Merge #${b.id} into it)
+              </button>
+            </div>
+          </div>
+
+          <!-- Image B -->
+          <div class="img-slot ${!preferA ? 'recommended' : ''}">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-weight:900; font-size:13px;">Image #${b.id}</span>
+              ${!preferA ? '<span style="color:#059669; font-size:11px; font-weight:900;">★ Recommended (Higher Res/Size)</span>' : ''}
+            </div>
+            <div class="img-preview">
+              <img src="${b.url}" loading="lazy" />
+            </div>
+            <div class="img-info">
+              <div>Dimensions: <b>${b.dimensions || 'Unknown'}</b> | Size: <b>${formatBytes(b.file_size)}</b></div>
+              <div>Ghost Score: <b>${b.score !== null ? (b.score > 0 ? '+' : '') + b.score : 'N/A'}</b> | Battles: <b>${b.battles}</b> (Wins: ${b.wins})</div>
+            </div>
+            <div style="display:flex; gap:10px; margin-top:6px;">
+              <button class="btn btn-primary" style="flex:1;" onclick="mergePair(${b.id}, ${a.id}, 'pair-row-${idx}')">
+                ✅ Keep #${b.id} (Merge #${a.id} into it)
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      container.appendChild(card);
+    });
+
+  } catch (err) {
+    container.innerHTML = `<div class="empty-state"><h3 style="color:var(--dislike); font-weight:900;">Error: ${err.message}</h3></div>`;
+  }
+}
+
+async function mergePair(keepId, retireId, rowElemId) {
+  if (!confirm(`Merge duplicate #${retireId} into #${keepId}?\\n\\n• All comparison history will be transferred to #${keepId}.\\n• Image #${retireId} will be permanently removed.`)) {
+    return;
+  }
+  const row = document.getElementById(rowElemId);
+  if (row) row.style.opacity = '0.5';
+
+  try {
+    const res = await fetch('/api/images/merge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keep_id: keepId, retire_id: retireId, domain_id: domainId })
+    });
+    const d = await res.json();
+    if (!res.ok) throw new Error(d.detail || 'Merge failed');
+
+    if (row) {
+      row.style.background = '#e6fffa';
+      row.innerHTML = `<div style="padding:24px; text-align:center; font-weight:900; font-size:14px; color:#059669;">✅ Merged #${retireId} into #${keepId} cleanly!</div>`;
+      setTimeout(() => row.remove(), 1600);
+    }
+  } catch (err) {
+    alert('Merge failed: ' + err.message);
+    if (row) row.style.opacity = '1';
+  }
+}
+
+document.getElementById('scanBtn').onclick = loadDuplicates;
+document.getElementById('threshSelect').onchange = loadDuplicates;
+
+loadDuplicates();
+</script>
+</body>
+</html>
