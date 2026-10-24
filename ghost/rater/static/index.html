@@ -9,18 +9,7 @@
 <title>Ghost in the GPU // Active Learner</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <style>
-  :root {
-    --bg: #FFF7E6;
-    --panel: #FFFFFF;
-    --panel-2: #FFFCF0;
-    --ink: #111111;
-    --text: #111111;
-    --muted: #5C5C5C;
-    --like: #2EE6A0;
-    --dislike: #FF5470;
-    --accent: #C8FF3D;
-    --radius: 12px;
-  }
+
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -490,6 +479,17 @@
     font-weight: 900;
   }
 </style>
+    <!-- 
+    ==========================================================================
+    NOTE FOR AGENTIC AI / DEVELOPERS:
+    Global UI design system tokens, resets, modal, toast, and common button styles
+    are centralized in '/static/common.css'.
+    When debugging, modifying, or fixing UI/styling issues on this page, 
+    ALWAYS inspect and consider '/static/common.css' (ghost/rater/static/common.css) 
+    alongside the page-specific <style> block.
+    ==========================================================================
+  -->
+  <link rel="stylesheet" href="/static/common.css">
 </head>
 <body>
 <header>
