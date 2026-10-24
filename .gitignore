@@ -10,17 +10,14 @@ __pycache__/
 *.pyd
 
 # User Data & Personal Image Library (Keep personal media private by default)
-ghost/data/images/
-ghost/data/embeddings/
-ghost/data/*.db
-ghost/data/*.db-wal
-ghost/data/*.db-shm
-ghost/data/*.db-journal
+ghost/data/
 *.npy
 
 # Models & Checkpoints (User multi-domain neural brains & weights)
 ghost/models/*
 !ghost/models/.gitkeep
+ghost/models_backup*/
+*_backup*/
 *.pkl
 *.pt
 *.bin
@@ -36,15 +33,14 @@ desktop.ini
 *.log
 
 # ═══════════════════════════════════════════════════
-# Backups and test artifacts (added 2026-10-23)
+# Backups, atomic temp files, and test artifacts
 # ═══════════════════════════════════════════════════
 *.bak.*
 *.bak
+*.tmp
 .pytest_cache/
-.pytest_cache/*
 .coverage
 htmlcov/
 
 # Research / reference materials
 encoder_research_paper_*.pdf
-*.pdf.tmp
