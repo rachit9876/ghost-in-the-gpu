@@ -765,7 +765,8 @@ def api_delete_domain(domain_id: int):
 # ═══════════════════════════════════════════════════
 @app.get("/api/images")
 def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
-                    sort: str = "newest", batch: Optional[str] = None):
+                    sort: str = "newest", batch: Optional[str] = None,
+                    image_id: Optional[int] = None):
     page = max(1, page)
     per_page = max(1, min(200, per_page))
     offset = (page - 1) * per_page
@@ -774,7 +775,14 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
     is_trained = brain_p.exists()
 
     batch_filter = "AND batch_id=?" if batch else ""
-    base_params = (domain_id, batch) if batch else (domain_id,)
+    id_filter = "AND id=?" if image_id else ""
+    where_extra = f"{batch_filter} {id_filter}".strip()
+    extra_params = []
+    if batch:
+        extra_params.append(batch)
+    if image_id:
+        extra_params.append(image_id)
+    base_params = (domain_id, *extra_params)
 
     with db_conn() as c:
         dom = c.execute(
@@ -785,7 +793,7 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
             raise HTTPException(404, "Domain not found")
 
         total = c.execute(
-            f"SELECT COUNT(*) FROM images WHERE domain_id=? {batch_filter}",
+            f"SELECT COUNT(*) FROM images WHERE domain_id=? {where_extra}",
             base_params
         ).fetchone()[0]
         cmp_cnt = c.execute(
@@ -798,7 +806,7 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
             scorer = get_scorer(domain_id)
             rows = c.execute(
                 f"SELECT id, filename, sha256, added_at, batch_id FROM images "
-                f"WHERE domain_id=? {batch_filter} ORDER BY id DESC",
+                f"WHERE domain_id=? {where_extra} ORDER BY id DESC",
                 base_params
             ).fetchall()
             items = []
@@ -829,7 +837,7 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
             order_dir = "ASC" if sort == "oldest" else "DESC"
             rows = c.execute(
                 f"SELECT id, filename, sha256, added_at, batch_id FROM images "
-                f"WHERE domain_id=? {batch_filter} "
+                f"WHERE domain_id=? {where_extra} "
                 f"ORDER BY id {order_dir} LIMIT ? OFFSET ?",
                 base_params + (per_page, offset)
             ).fetchall()

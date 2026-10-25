@@ -906,6 +906,12 @@
     </div>
 
     <div class="toolbar-group">
+      <span style="font-size:11px;font-weight:900;text-transform:uppercase;">Search ID:</span>
+      <div style="display:flex;align-items:center;gap:4px;">
+        <input type="number" id="searchIdInput" placeholder="ID..." min="1" style="width:85px;padding:5px 8px;border:2.5px solid var(--ink);border-radius:8px;font-size:12px;font-weight:800;outline:none;" />
+        <button class="btn" id="clearSearchIdBtn" title="Clear ID search" style="display:none;padding:4px 8px;font-size:11px;">✕</button>
+      </div>
+
       <span style="font-size:11px;font-weight:900;text-transform:uppercase;">Batch:</span>
       <select class="select-box" id="batchFilterSelect">
         <option value="">All Batches</option>
@@ -1079,7 +1085,12 @@
     const perPage = parseInt(perPageSelect.value, 10);
     const sort = sortSelect.value;
     const batch = batchFilterSelect.value ? `&batch=${encodeURIComponent(batchFilterSelect.value)}` : '';
-    const res = await fetch(`/api/images?domain_id=${domainId}&page=${currentPage}&per_page=${perPage}&sort=${sort}${batch}`);
+    const searchIdVal = searchIdInput ? searchIdInput.value.trim() : '';
+    const idParam = searchIdVal ? `&image_id=${encodeURIComponent(searchIdVal)}` : '';
+    if (clearSearchIdBtn) {
+      clearSearchIdBtn.style.display = searchIdVal ? 'inline-flex' : 'none';
+    }
+    const res = await fetch(`/api/images?domain_id=${domainId}&page=${currentPage}&per_page=${perPage}&sort=${sort}${batch}${idParam}`);
     if (!res.ok) {
       location.href = '/';
       return;
@@ -1223,6 +1234,32 @@
   nextPageBtn.onclick = () => { if (currentPage < totalPages) { currentPage++; loadPage(); } };
   sortSelect.onchange = () => { currentPage = 1; loadPage(); };
   perPageSelect.onchange = () => { currentPage = 1; loadPage(); };
+
+  // Search by ID handler
+  const searchIdInput = document.getElementById('searchIdInput');
+  const clearSearchIdBtn = document.getElementById('clearSearchIdBtn');
+  if (searchIdInput) {
+    searchIdInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        currentPage = 1;
+        loadPage();
+      }
+    });
+    searchIdInput.addEventListener('input', () => {
+      if (!searchIdInput.value.trim()) {
+        currentPage = 1;
+        loadPage();
+      }
+    });
+  }
+  if (clearSearchIdBtn) {
+    clearSearchIdBtn.onclick = () => {
+      searchIdInput.value = '';
+      clearSearchIdBtn.style.display = 'none';
+      currentPage = 1;
+      loadPage();
+    };
+  }
 
   // Encoder View Toggle (What PE-Core L14-336 Sees)
   let encoderModeActive = localStorage.getItem('ghost_encoder_view') === '1';
