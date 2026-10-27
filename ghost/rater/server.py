@@ -801,9 +801,32 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
         ).fetchone()[0]
 
         use_scores = sort in ("score_high", "score_low") and is_trained
+        use_battles = sort in ("most_wins", "most_battles", "fewest_battles", "win_rate")
+        use_filesize = sort in ("filesize_large", "filesize_small")
 
-        if use_scores:
-            scorer = get_scorer(domain_id)
+        # Load battle statistics for items
+        battle_stats = {}
+        cmp_rows = c.execute(
+            "SELECT winner_id, losers_json FROM comparisons WHERE domain_id=? AND is_retest=0",
+            (domain_id,)
+        ).fetchall()
+        for cr in cmp_rows:
+            wid = cr["winner_id"]
+            if wid not in battle_stats:
+                battle_stats[wid] = {"wins": 0, "battles": 0}
+            battle_stats[wid]["wins"] += 1
+            battle_stats[wid]["battles"] += 1
+            try:
+                ls = json.loads(cr["losers_json"])
+                for lid in ls:
+                    if lid not in battle_stats:
+                        battle_stats[lid] = {"wins": 0, "battles": 0}
+                    battle_stats[lid]["battles"] += 1
+            except Exception:
+                pass
+
+        if use_scores or use_battles or use_filesize:
+            scorer = get_scorer(domain_id) if is_trained else None
             rows = c.execute(
                 f"SELECT id, filename, sha256, added_at, batch_id FROM images "
                 f"WHERE domain_id=? {where_extra} ORDER BY id DESC",
@@ -812,7 +835,13 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
             items = []
             for r in rows:
                 iid = r["id"]
-                sc = scorer.score(iid)
+                sc = scorer.score(iid) if (scorer and scorer.loaded) else None
+                b_info = battle_stats.get(iid, {"wins": 0, "battles": 0})
+                w_cnt = b_info["wins"]
+                b_cnt = b_info["battles"]
+                rate = round((w_cnt / b_cnt) * 100, 1) if b_cnt > 0 else 0.0
+                f_path = IMAGES_DIR / r["filename"]
+                f_size = f_path.stat().st_size if f_path.is_file() else 0
                 items.append({
                     "id": iid,
                     "url": f"/api/image/{iid}",
@@ -820,18 +849,38 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
                     "added_at": r["added_at"],
                     "batch_id": r["batch_id"],
                     "score": round(sc, 3) if sc is not None else None,
+                    "wins": w_cnt,
+                    "battles": b_cnt,
+                    "win_rate": rate,
+                    "filesize": f_size,
                 })
+
             if sort == "score_high":
                 items.sort(
                     key=lambda x: (x["score"] is not None,
                                    x["score"] if x["score"] is not None else -1e9),
                     reverse=True,
                 )
-            else:
+            elif sort == "score_low":
                 items.sort(
                     key=lambda x: (x["score"] is None,
                                    x["score"] if x["score"] is not None else 1e9),
                 )
+            elif sort == "most_wins":
+                items.sort(key=lambda x: (x["wins"], x["win_rate"], x["id"]), reverse=True)
+            elif sort == "most_battles":
+                items.sort(key=lambda x: (x["battles"], x["wins"], x["id"]), reverse=True)
+            elif sort == "fewest_battles":
+                items.sort(key=lambda x: (x["battles"], -x["id"]))
+            elif sort == "win_rate":
+                items.sort(
+                    key=lambda x: (x["battles"] >= 2, x["win_rate"], x["wins"], x["id"]),
+                    reverse=True
+                )
+            elif sort == "filesize_large":
+                items.sort(key=lambda x: (x["filesize"], x["id"]), reverse=True)
+            elif sort == "filesize_small":
+                items.sort(key=lambda x: (x["filesize"] if x["filesize"] > 0 else 1e12, x["id"]))
             paged = items[offset: offset + per_page]
         else:
             order_dir = "ASC" if sort == "oldest" else "DESC"
@@ -846,6 +895,12 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
             for r in rows:
                 iid = r["id"]
                 sc = scorer.score(iid) if (scorer and scorer.loaded) else None
+                b_info = battle_stats.get(iid, {"wins": 0, "battles": 0})
+                w_cnt = b_info["wins"]
+                b_cnt = b_info["battles"]
+                rate = round((w_cnt / b_cnt) * 100, 1) if b_cnt > 0 else 0.0
+                f_path = IMAGES_DIR / r["filename"]
+                f_size = f_path.stat().st_size if f_path.is_file() else 0
                 paged.append({
                     "id": iid,
                     "url": f"/api/image/{iid}",
@@ -853,6 +908,10 @@ def api_list_images(domain_id: int = 1, page: int = 1, per_page: int = 40,
                     "added_at": r["added_at"],
                     "batch_id": r["batch_id"],
                     "score": round(sc, 3) if sc is not None else None,
+                    "wins": w_cnt,
+                    "battles": b_cnt,
+                    "win_rate": rate,
+                    "filesize": f_size,
                 })
 
     total_pages = max(1, (total + per_page - 1) // per_page)

@@ -246,6 +246,29 @@
     font-size: 10px;
     font-weight: 900;
     box-shadow: 2px 2px 0 var(--ink);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .card-battles {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: #fff;
+    color: var(--ink);
+    border: 1.5px solid var(--ink);
+    border-radius: 5px;
+    padding: 1px 5px;
+    font-size: 9px;
+    font-weight: 800;
+    box-shadow: 1.5px 1.5px 0 var(--ink);
+    z-index: 2;
+    transition: opacity 0.15s ease;
+  }
+
+  .img-card:hover .card-battles {
+    opacity: 0;
+    pointer-events: none;
   }
 
   .card-id {
@@ -923,6 +946,12 @@
         <option value="oldest">Oldest First</option>
         <option value="score_high">Highest Ghost Score</option>
         <option value="score_low">Lowest Ghost Score</option>
+        <option value="most_wins">Most Wins (Champions)</option>
+        <option value="win_rate">Highest Win Rate %</option>
+        <option value="most_battles">Most Tested (Most Battles)</option>
+        <option value="fewest_battles">Under-tested (Fewest Battles)</option>
+        <option value="filesize_large">Largest File Size (MB)</option>
+        <option value="filesize_small">Smallest File Size (KB)</option>
       </select>
 
       <span style="font-size:11px;font-weight:900;text-transform:uppercase;">Per Page:</span>
@@ -1136,15 +1165,23 @@
       card.dataset.id = img.id;
 
       const scoreBadge = img.score !== null && img.score !== undefined
-        ? `<div class="card-score">${img.score > 0 ? '+' : ''}${img.score}</div>`
+        ? `<div class="card-score" title="Ghost Model Score">${img.score > 0 ? '+' : ''}${img.score}</div>`
         : '';
+
+      const battleBadge = (img.battles !== undefined && img.battles > 0)
+        ? `<div class="card-battles" title="${img.wins} Wins / ${img.battles} Battles (${img.win_rate}%)">⚔ ${img.wins}/${img.battles}</div>`
+        : (img.battles === 0 ? `<div class="card-battles" style="opacity:0.65;background:#f5f5f5;" title="Unfought / 0 Battles">0 battles</div>` : '');
+
+      const sizeStr = img.filesize ? (img.filesize >= 1048576 ? (img.filesize / 1048576).toFixed(1) + 'MB' : Math.round(img.filesize / 1024) + 'KB') : '';
+      const sizeTag = sizeStr ? `<span style="opacity:0.75;font-weight:600;margin-left:3px;font-size:8.5px;">${sizeStr}</span>` : '';
 
       const imgCacheBustUrl = `${img.url}?t=${img.sha256 ? img.sha256.slice(0, 8) : Date.now()}`;
       card.innerHTML = `
         <img src="${imgCacheBustUrl}" alt="#${img.id}" loading="lazy" decoding="async" />
         <div class="card-check"></div>
         <div class="card-edit" title="Crop & Blur Mask Image">✏️</div>
-        <div class="card-id">#${img.id}</div>
+        <div class="card-id" title="ID #${img.id} (${sizeStr || 'unknown size'})">#${img.id}${sizeTag}</div>
+        ${battleBadge}
         ${scoreBadge}
       `;
 
