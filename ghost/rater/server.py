@@ -414,6 +414,7 @@ class AuditDeleteBody(BaseModel):
 
 class TrainBody(BaseModel):
     domain_id: int = 1
+    dims: Optional[List[int]] = None
 
 
 class BulkDeleteComparisonsBody(BaseModel):
@@ -605,6 +606,11 @@ def import_page():
 @app.get("/duplicates")
 def duplicates_page():
     return FileResponse(_STATIC_DIR / "duplicates.html")
+
+
+@app.get("/train")
+def train_page():
+    return FileResponse(_STATIC_DIR / "train.html")
 
 
 @app.get("/audit")
@@ -2558,8 +2564,11 @@ def api_train(payload: Optional[TrainBody] = None,
             # shell=True + start "..." which detaches immediately). Ctrl+C in
             # the server terminal cannot kill training; closing the training
             # window does kill it.
+            cmd = [py_cmd, "-m", "ghost.sensory.tournament", str(did)]
+            if payload and payload.dims:
+                cmd.extend(["--dims", ",".join(str(d) for d in payload.dims if isinstance(d, int) and d > 1)])
             proc = subprocess.Popen(
-                [py_cmd, "-m", "ghost.sensory.tournament", str(did)],
+                cmd,
                 cwd=str(ROOT_DIR),
                 creationflags=subprocess.CREATE_NEW_CONSOLE,
             )
@@ -2568,8 +2577,11 @@ def api_train(payload: Optional[TrainBody] = None,
             py_cmd = str(py_exe) if py_exe.is_file() else sys.executable
             # start_new_session detaches the child from the server's process
             # group so Ctrl+C in the server doesn't kill training.
+            cmd = [py_cmd, "-m", "ghost.sensory.tournament", str(did)]
+            if payload and payload.dims:
+                cmd.extend(["--dims", ",".join(str(d) for d in payload.dims if isinstance(d, int) and d > 1)])
             proc = subprocess.Popen(
-                [py_cmd, "-m", "ghost.sensory.tournament", str(did)],
+                cmd,
                 cwd=str(ROOT_DIR),
                 start_new_session=True,
             )

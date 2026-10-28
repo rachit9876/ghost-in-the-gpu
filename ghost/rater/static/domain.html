@@ -1436,28 +1436,10 @@
   };
 
   // One-Click Train Ghost for this Domain
-  trainGhostBtn.onclick = async () => {
-    trainGhostBtn.disabled = true;
-    trainGhostBtn.textContent = '⏳ Launching Tournament...';
-    try {
-      const res = await fetch('/api/train', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ domain_id: domainId })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.detail || data.error || 'Training failed');
-      showToast('🚀 Tournament training launched in a separate terminal window!', 5000);
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setTimeout(() => {
-        trainGhostBtn.disabled = false;
-        trainGhostBtn.textContent = '🧠 Train This Ghost';
-      }, 3000);
-    }
+  // Redirect to Tournament Configuration & Launchpad
+  trainGhostBtn.onclick = () => {
+    window.location.href = `/train?domain_id=${domainId}`;
   };
-
   const editModal = document.getElementById('editModalBackdrop');
   const editDomNameInput = document.getElementById('editDomNameInput');
   const editDomDescInput = document.getElementById('editDomDescInput');

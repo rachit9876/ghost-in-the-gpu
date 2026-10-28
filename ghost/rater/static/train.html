@@ -1,0 +1,589 @@
+<!doctype html>
+<html lang="en">
+<head>
+<!--
+  ==========================================================================
+  NOTE FOR AGENTIC AI / DEVELOPERS:
+  Global UI design system tokens, resets, modal, toast, and common button styles
+  are centralized in '/static/common.css'.
+  When debugging, modifying, or fixing UI/styling issues on this page,
+  ALWAYS inspect and consider '/static/common.css' (ghost/rater/static/common.css)
+  alongside the page-specific <style> block.
+  ==========================================================================
+-->
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ghost in the GPU // Train Neural Twin</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg" />
+<link rel="stylesheet" href="/static/common.css" />
+<style>
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(17,17,17,.11) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 3px solid var(--ink);
+    padding: 10px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .nav-left, .nav-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+
+  .domain-badge {
+    background: var(--accent);
+    border: 2.5px solid var(--ink);
+    border-radius: 9px;
+    padding: 5px 12px;
+    font-size: 13px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .stat-pill {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--panel-2);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 5px 10px;
+    color: var(--ink);
+  }
+
+  .btn {
+    border: 2.5px solid var(--ink);
+    background: #fff;
+    color: var(--ink);
+    padding: 8px 13px;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform .08s, box-shadow .08s, background .12s;
+    text-decoration: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .btn:hover:not(:disabled) {
+    background: var(--accent);
+    transform: translate(-1px,-1px);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .btn:active:not(:disabled) {
+    transform: translate(2px,2px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+
+  .container {
+    max-width: 920px;
+    margin: 32px auto;
+    padding: 0 20px;
+    width: 100%;
+  }
+
+  .train-card {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 14px;
+    padding: 28px;
+    box-shadow: 5px 5px 0 var(--ink);
+    margin-bottom: 24px;
+  }
+
+  .card-title {
+    font-size: 21px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .02em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+
+  .card-desc {
+    font-size: 14px;
+    color: var(--muted);
+    line-height: 1.55;
+    margin-bottom: 22px;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 24px;
+  }
+
+  .stat-box {
+    background: var(--panel-2);
+    border: 2.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .stat-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+    color: var(--muted);
+    margin-bottom: 5px;
+  }
+
+  .stat-val {
+    font-size: 18px;
+    font-weight: 900;
+    font-family: var(--font-mono);
+  }
+
+  .presets-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 2px dashed rgba(17,17,17,.18);
+  }
+
+  .preset-btn {
+    background: #fff;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    cursor: pointer;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: all .1s ease;
+  }
+
+  .preset-btn:hover {
+    background: var(--accent);
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .preset-btn:active {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+
+  .dims-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(135px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .dim-pill {
+    border: 2.5px solid var(--ink);
+    border-radius: 10px;
+    padding: 12px 10px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    background: #fafafa;
+    user-select: none;
+    box-shadow: 2px 2px 0 var(--ink);
+    transition: all .12s ease;
+  }
+
+  .dim-pill:hover {
+    transform: translate(-1px, -1px);
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .dim-pill.active {
+    background: var(--amber);
+    border-color: var(--ink);
+    box-shadow: 3px 3px 0 var(--ink);
+    transform: translate(-1px, -1px);
+  }
+
+  .dim-pill.sweet-spot {
+    border-color: #059669;
+  }
+
+  .dim-pill.sweet-spot.active {
+    background: var(--like);
+    border-color: var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+
+  .dim-header {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dim-name {
+    font-size: 15px;
+    font-weight: 900;
+    font-family: var(--font-mono);
+  }
+
+  .dim-tag {
+    font-size: 10px;
+    font-weight: 900;
+    text-transform: uppercase;
+    padding: 2px 6px;
+    border-radius: 5px;
+    background: var(--ink);
+    color: var(--accent);
+  }
+
+  .dim-speed {
+    font-size: 11px;
+    color: var(--ink);
+    opacity: 0.75;
+    font-weight: 700;
+  }
+
+  .contender-summary {
+    background: var(--panel-2);
+    border: 2.5px solid var(--ink);
+    border-radius: 12px;
+    padding: 18px 22px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+
+  .summary-text {
+    font-size: 14px;
+    line-height: 1.5;
+    font-weight: 700;
+  }
+
+  .summary-highlight {
+    font-weight: 900;
+    font-family: var(--font-mono);
+    background: var(--accent);
+    padding: 2px 7px;
+    border-radius: 5px;
+    border: 1.5px solid var(--ink);
+  }
+
+  .launch-btn {
+    background: var(--like);
+    color: var(--ink);
+    border: 3px solid var(--ink);
+    border-radius: 10px;
+    padding: 14px 28px;
+    font-size: 15px;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 var(--ink);
+    transition: all .12s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+
+  .launch-btn:hover:not(:disabled) {
+    background: var(--accent);
+    transform: translate(-2px, -2px);
+    box-shadow: 6px 6px 0 var(--ink);
+  }
+
+  .launch-btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 1px 1px 0 var(--ink);
+  }
+
+  .launch-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="nav-left">
+    <a class="btn" href="/domain" id="backToDomainLink">← Domain Workspace</a>
+    <div class="domain-badge" id="domainTitlePill">Domain #1</div>
+  </div>
+  <div class="nav-right">
+    <a class="btn" href="/rate" id="rateNavBtn">⚖️ Rate Pairs</a>
+    <a class="btn" href="/audit" id="auditNavBtn">🔍 Audit Misclicks</a>
+    <a class="btn" href="/flex" id="flexNavBtn">⚡ Flex Sorter</a>
+  </div>
+</header>
+
+<div class="container">
+  <div class="train-card">
+    <div class="card-title">
+      <span>🧠 Ghost Neural Tournament Launchpad</span>
+    </div>
+    <div class="card-desc">
+      Select which PCA dimensional subspaces (<strong>D</strong>) to evaluate in the Zero-Leakage 5-Fold Cross-Validation Tournament.
+      Testing focused sweet-spot dimensions finishes in seconds while utilizing all CPU threads.
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-label">Training Corpus</div>
+        <div class="stat-val" id="statPairs">Loading...</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Active Images</div>
+        <div class="stat-val" id="statImages">Loading...</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-label">Current Brain Status</div>
+        <div class="stat-val" id="statAccuracy">Loading...</div>
+      </div>
+    </div>
+
+    <div class="presets-bar">
+      <span style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--muted); margin-right:4px;">Quick Presets:</span>
+      <button class="preset-btn" id="presetFast" type="button">⚡ Fast Sweet-Spot (96D–256D)</button>
+      <button class="preset-btn" id="presetSweet" type="button">👑 160D Peak Only</button>
+      <button class="preset-btn" id="presetFull" type="button">🔍 Check All (All 13 Ds)</button>
+      <button class="preset-btn" id="presetClear" type="button">✕ Uncheck All</button>
+    </div>
+
+    <div class="dims-grid" id="dimsGrid"></div>
+
+    <div class="contender-summary">
+      <div class="summary-text">
+        <div>Tournament Scope: <span class="summary-highlight" id="contenderCount">0</span> contenders (<span id="dimCount">0</span> dimensions × 22 algorithms)</div>
+        <div style="color:var(--muted); font-size:12px; margin-top:6px;" id="timeEstimate">Estimated runtime: —</div>
+      </div>
+      <button class="launch-btn" id="launchBtn" type="button">
+        <span>🚀 Launch Tournament</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toastBox"></div>
+
+<script>
+(() => {
+  const ALL_DIMS = [
+    { d: 32,   label: '32D',   speed: 'Ultra Fast' },
+    { d: 48,   label: '48D',   speed: 'Ultra Fast' },
+    { d: 64,   label: '64D',   speed: 'Ultra Fast' },
+    { d: 96,   label: '96D',   speed: 'Fast' },
+    { d: 128,  label: '128D',  speed: 'Fast' },
+    { d: 160,  label: '160D',  speed: 'Sweet Spot', sweet: true, tag: 'PEAK 👑' },
+    { d: 192,  label: '192D',  speed: 'High Acc',   sweet: true },
+    { d: 256,  label: '256D',  speed: 'Balanced' },
+    { d: 384,  label: '384D',  speed: 'Moderate' },
+    { d: 512,  label: '512D',  speed: 'Slower' },
+    { d: 768,  label: '768D',  speed: 'Heavy' },
+    { d: 896,  label: '896D',  speed: 'Heavy' },
+    { d: 1024, label: '1024D', speed: 'Max Dim' }
+  ];
+
+  // Default: Fast & Recommended sweet-spot range
+  let selectedDims = new Set([96, 128, 160, 192, 256]);
+
+  const urlParams = new URLSearchParams(window.location.search);
+  const rawDomId = parseInt(
+    urlParams.get('domain_id') || urlParams.get('domain') || urlParams.get('id') || sessionStorage.getItem('ghost_domain_id') || '1',
+    10
+  );
+  const domainId = Number.isFinite(rawDomId) && rawDomId > 0 ? rawDomId : 1;
+  sessionStorage.setItem('ghost_domain_id', String(domainId));
+
+  document.getElementById('domainTitlePill').textContent = `Domain #${domainId}`;
+  document.getElementById('backToDomainLink').href = `/domain?id=${domainId}`;
+  document.getElementById('rateNavBtn').href = `/rate?domain_id=${domainId}`;
+  document.getElementById('auditNavBtn').href = `/audit?domain_id=${domainId}`;
+  document.getElementById('flexNavBtn').href = `/flex?domain_id=${domainId}`;
+
+  const dimsGrid = document.getElementById('dimsGrid');
+  const contenderCount = document.getElementById('contenderCount');
+  const dimCount = document.getElementById('dimCount');
+  const timeEstimate = document.getElementById('timeEstimate');
+  const launchBtn = document.getElementById('launchBtn');
+  const toastBox = document.getElementById('toastBox');
+
+  function showToast(msg, ms = 4000) {
+    toastBox.textContent = msg;
+    toastBox.classList.add('show');
+    clearTimeout(toastBox._t);
+    toastBox._t = setTimeout(() => toastBox.classList.remove('show'), ms);
+  }
+
+  function renderDims() {
+    dimsGrid.innerHTML = '';
+    ALL_DIMS.forEach(item => {
+      const isChecked = selectedDims.has(item.d);
+      const el = document.createElement('div');
+      el.className = `dim-pill ${isChecked ? 'active' : ''} ${item.sweet ? 'sweet-spot' : ''}`;
+
+      const tagHtml = item.tag ? `<span class="dim-tag">${item.tag}</span>` : '';
+      el.innerHTML = `
+        <div class="dim-header">
+          <input type="checkbox" ${isChecked ? 'checked' : ''} style="pointer-events:none; accent-color:#111; width:15px; height:15px;" />
+          <span class="dim-name">${item.label}</span>
+          ${tagHtml}
+        </div>
+        <div class="dim-speed">${item.speed}</div>
+      `;
+
+      el.onclick = () => {
+        if (selectedDims.has(item.d)) {
+          selectedDims.delete(item.d);
+        } else {
+          selectedDims.add(item.d);
+        }
+        renderDims();
+        updateSummary();
+      };
+
+      dimsGrid.appendChild(el);
+    });
+  }
+
+  function updateSummary() {
+    const count = selectedDims.size;
+    dimCount.textContent = count;
+    const totalContenders = count * 22;
+    contenderCount.textContent = totalContenders;
+
+    if (count === 0) {
+      timeEstimate.textContent = 'Select at least 1 dimension to launch training.';
+      launchBtn.disabled = true;
+      return;
+    }
+
+    launchBtn.disabled = false;
+    let estSec = Math.max(2, Math.round(count * 1.4));
+    if (selectedDims.has(768)) estSec += 3;
+    if (selectedDims.has(896)) estSec += 4;
+    if (selectedDims.has(1024)) estSec += 5;
+    timeEstimate.textContent = `Estimated 12-thread CPU runtime: ~${estSec} to ${estSec + 4} seconds`;
+  }
+
+  document.getElementById('presetFast').onclick = () => {
+    selectedDims = new Set([96, 128, 160, 192, 256]);
+    renderDims();
+    updateSummary();
+  };
+
+  document.getElementById('presetSweet').onclick = () => {
+    selectedDims = new Set([160]);
+    renderDims();
+    updateSummary();
+  };
+
+  document.getElementById('presetFull').onclick = () => {
+    selectedDims = new Set(ALL_DIMS.map(x => x.d));
+    renderDims();
+    updateSummary();
+  };
+
+  document.getElementById('presetClear').onclick = () => {
+    selectedDims.clear();
+    renderDims();
+    updateSummary();
+  };
+
+  async function loadDomainStats() {
+    try {
+      const res = await fetch('/api/domains');
+      if (!res.ok) return;
+      const data = await res.json();
+      const dom = (data.domains || []).find(d => d.id === domainId);
+      if (dom) {
+        document.getElementById('domainTitlePill').textContent = `Domain #${dom.id} · ${dom.name}`;
+        document.getElementById('statPairs').textContent = `${(dom.comparison_count || 0).toLocaleString()} battles`;
+        document.getElementById('statImages').textContent = `${(dom.image_count || 0).toLocaleString()} images`;
+        if (dom.is_trained) {
+          const accStr = dom.accuracy != null ? `${Number(dom.accuracy).toFixed(2)}% CV` : 'Trained';
+          document.getElementById('statAccuracy').textContent = `🧠 ${accStr}`;
+        } else {
+          document.getElementById('statAccuracy').textContent = '⚡ Untrained';
+        }
+      }
+    } catch (e) {
+      console.error('Failed to load domain stats:', e);
+    }
+  }
+
+  launchBtn.onclick = async () => {
+    if (selectedDims.size === 0) return;
+
+    launchBtn.disabled = true;
+    launchBtn.innerHTML = '<span>⏳ Launching Tournament...</span>';
+
+    try {
+      const res = await fetch('/api/train', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          domain_id: domainId,
+          dims: Array.from(selectedDims).sort((a, b) => a - b)
+        })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.error || 'Failed to start tournament');
+
+      showToast('🚀 Tournament training launched in a separate terminal window!', 5000);
+      launchBtn.innerHTML = '<span>✓ Console Launched!</span>';
+      setTimeout(() => {
+        launchBtn.innerHTML = '<span>🚀 Launch Tournament</span>';
+        launchBtn.disabled = false;
+      }, 3500);
+    } catch (e) {
+      alert(e.message);
+      launchBtn.innerHTML = '<span>🚀 Launch Tournament</span>';
+      launchBtn.disabled = false;
+    }
+  };
+
+  renderDims();
+  updateSummary();
+  loadDomainStats();
+})();
+</script>
+</body>
+</html>

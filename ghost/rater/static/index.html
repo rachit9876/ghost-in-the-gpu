@@ -619,26 +619,9 @@
   updateMirrorIndicator();
 
   if (trainBtn) {
-    trainBtn.onclick = async () => {
-      trainBtn.disabled = true;
-      trainBtn.textContent = '⏳ Launching...';
-      try {
-        const res = await fetch('/api/train', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ domain_id: activeDomainId })
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.detail || 'Failed to start tournament');
-        alert('🚀 Training tournament launched in a separate terminal window!\nYou can keep rating while it trains.');
-      } catch (e) {
-        alert(e.message);
-      } finally {
-        setTimeout(() => {
-          trainBtn.disabled = false;
-          trainBtn.textContent = '🧠 Train Ghost';
-        }, 3000);
-      }
+    // Redirect to Tournament Configuration & Launchpad
+    trainBtn.onclick = () => {
+      window.location.href = `/train?domain_id=${activeDomainId}`;
     };
   }
 

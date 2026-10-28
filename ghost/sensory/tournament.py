@@ -137,7 +137,7 @@ def load_domain_comparisons(domain_id: int):
     return rows, dom_imgs, pair_weights
 
 
-def train_ghost(domain_id: int = 1) -> dict:
+def train_ghost(domain_id: int = 1, candidate_dims: list = None) -> dict:
     print("=" * 60)
     print(f"  GHOST IN THE GPU — TRAINING DOMAIN #{domain_id}")
     print("=" * 60)
@@ -239,7 +239,8 @@ def train_ghost(domain_id: int = 1) -> dict:
 
     min_train_fold_size = min(len(valid_images) - len(f) for f in folds)
     max_cv_dim = min(min_train_fold_size - 1, all_mat.shape[1])
-    candidate_dims = [d for d in CANDIDATE_DIMS if d <= max_cv_dim]
+    active_dims = candidate_dims if candidate_dims else CANDIDATE_DIMS
+    candidate_dims = [d for d in active_dims if d <= max_cv_dim]
     if not candidate_dims:
         fallback_d = max(2, max_cv_dim)
         candidate_dims = [fallback_d]
@@ -552,8 +553,18 @@ def _render_tournament_summary(
 
 
 if __name__ == "__main__":
-    dom_id = int(sys.argv[1]) if len(sys.argv) > 1 else 1
-    res = train_ghost(dom_id)
+    import argparse
+    parser = argparse.ArgumentParser(description="Ghost Tournament Trainer")
+    parser.add_argument("domain_id", nargs="?", type=int, default=1, help="Domain ID")
+    parser.add_argument("--dims", type=str, default="", help="Comma-separated list of dimensions")
+    args = parser.parse_args()
+
+    parsed_dims = None
+    if args.dims.strip():
+        parsed_dims = [int(x.strip()) for x in args.dims.split(",") if x.strip().isdigit()]
+
+    dom_id = args.domain_id
+    res = train_ghost(dom_id, candidate_dims=parsed_dims)
 
     if not res.get("ok"):
         print("\n" + "=" * 65, file=sys.stderr)
