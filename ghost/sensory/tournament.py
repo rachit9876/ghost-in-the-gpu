@@ -23,6 +23,7 @@ except Exception:
     pass
 
 import numpy as np
+from joblib import Parallel, delayed
 from sklearn.decomposition import PCA
 from sklearn.linear_model import LogisticRegression, RidgeClassifier, SGDClassifier
 from sklearn.svm import LinearSVC
@@ -72,11 +73,11 @@ ALGO_GRID = [
     {"name": "Huber Elastic (a=1e-3)", "make": lambda: SGDClassifier(loss="modified_huber", penalty="elasticnet", l1_ratio=0.3, alpha=1e-3, max_iter=1500, random_state=SEED)},
 
     # Sparse L1 regularization
-    {"name": "Sparse L1 (C=0.5)",  "make": lambda: LogisticRegression(penalty="l1", C=0.5, solver="liblinear", random_state=SEED, max_iter=1000)},
-    {"name": "Sparse L1 (C=1.0)",  "make": lambda: LogisticRegression(penalty="l1", C=1.0, solver="liblinear", random_state=SEED, max_iter=1000)},
-    {"name": "Sparse L1 (C=2.0)",  "make": lambda: LogisticRegression(penalty="l1", C=2.0, solver="liblinear", random_state=SEED, max_iter=1000)},
-    {"name": "Sparse L1 (C=3.0)",  "make": lambda: LogisticRegression(penalty="l1", C=3.0, solver="liblinear", random_state=SEED, max_iter=1000)},
-    {"name": "Sparse L1 (C=4.0)",  "make": lambda: LogisticRegression(penalty="l1", C=4.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=0.5)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=0.5, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=1.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=1.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=2.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=2.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=3.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=3.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=4.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=4.0, solver="liblinear", random_state=SEED, max_iter=1000)},
 ]
 
 
@@ -192,36 +193,45 @@ def train_ghost(domain_id: int = 1) -> dict:
         if valid_l:
             parsed_comps.append((w, valid_l))
 
-    def fast_pair_diffs(X_reduced_mat, allowed_set):
-        allowed_set_chk = allowed_set
-        diffs = []
-        labels = []
-        weights = []
+    def precompute_pair_indices(allowed_set):
+        w_idxs = []
+        l_idxs = []
+        pws = []
         for w, losers in parsed_comps:
-            if w not in allowed_set_chk:
+            if w not in allowed_set:
                 continue
             w_idx = img_to_idx[w]
-            w_vec = X_reduced_mat[w_idx]
             for l in losers:
-                if l in allowed_set_chk:
+                if l in allowed_set:
                     l_idx = img_to_idx[l]
-                    l_vec = X_reduced_mat[l_idx]
-                    d = w_vec - l_vec
                     pkey = (min(w, l), max(w, l))
                     pw = pair_weights.get(pkey, 1.0)
-                    diffs.append(d)
-                    labels.append(1)
-                    weights.append(pw)
-                    diffs.append(-d)
-                    labels.append(0)
-                    weights.append(pw)
-        if not diffs:
-            return (np.empty((0, 0), dtype=np.float32),
+                    w_idxs.append(w_idx)
+                    l_idxs.append(l_idx)
+                    pws.append(pw)
+        if not w_idxs:
+            return (np.empty(0, dtype=np.int32),
+                    np.empty(0, dtype=np.int32),
                     np.empty(0, dtype=np.int8),
                     np.empty(0, dtype=np.float32))
-        return (np.array(diffs, dtype=np.float32),
-                np.array(labels, dtype=np.int8),
-                np.array(weights, dtype=np.float32))
+        n = len(w_idxs)
+        w_arr = np.array(w_idxs, dtype=np.int32)
+        l_arr = np.array(l_idxs, dtype=np.int32)
+        pw_arr = np.array(pws, dtype=np.float32)
+        labels = np.concatenate([np.ones(n, dtype=np.int8), np.zeros(n, dtype=np.int8)])
+        weights = np.concatenate([pw_arr, pw_arr])
+        return w_arr, l_arr, labels, weights
+
+    def build_pair_diffs_from_indices(X_reduced_mat, w_arr, l_arr):
+        if len(w_arr) == 0:
+            return np.empty((0, 0), dtype=np.float32)
+        d = X_reduced_mat[w_arr] - X_reduced_mat[l_arr]
+        return np.vstack([d, -d]).astype(np.float32, copy=False)
+
+    def fast_pair_diffs(X_reduced_mat, allowed_set):
+        w_arr, l_arr, labels, weights = precompute_pair_indices(allowed_set)
+        diffs = build_pair_diffs_from_indices(X_reduced_mat, w_arr, l_arr)
+        return diffs, labels, weights
 
     best_combo = None
     best_score = -1.0
@@ -239,53 +249,80 @@ def train_ghost(domain_id: int = 1) -> dict:
           f"{len(candidate_dims)} dimension(s) x {len(ALGO_GRID)} algorithms "
           f"= {total_contenders} contenders...")
 
-    for dim in candidate_dims:
-        algo_scores = {i: [] for i in range(len(ALGO_GRID))}
+    max_needed_dim = max(candidate_dims)
+    fold_cache = []
+    for k in range(n_folds):
+        test_imgs = set(folds[k])
+        train_imgs = set(valid_images) - test_imgs
+        if len(train_imgs) < 3:
+            continue
 
-        for k in range(n_folds):
-            test_imgs = set(folds[k])
-            train_imgs = set(valid_images) - test_imgs
-            if len(train_imgs) < 3:
-                continue
+        train_indices = [img_to_idx[img] for img in sorted(train_imgs)]
+        train_mat = all_mat[train_indices]
 
-            train_indices = [img_to_idx[img] for img in sorted(train_imgs)]
-            train_mat = all_mat[train_indices]
+        n_c_max = min(max_needed_dim, train_mat.shape[0] - 1, train_mat.shape[1])
+        if n_c_max < 2:
+            continue
 
-            n_c = min(dim, train_mat.shape[0] - 1, train_mat.shape[1])
+        # Fit full SVD once per fold and slice down for all smaller dimensions
+        pca = PCA(n_components=n_c_max, svd_solver="full", random_state=SEED)
+        pca.fit(train_mat)
+        X_reduced_max = pca.transform(all_mat)
+
+        tr_w, tr_l, y_tr, w_tr = precompute_pair_indices(train_imgs)
+        te_w, te_l, y_te, _ = precompute_pair_indices(test_imgs)
+
+        if len(y_tr) < 4 or len(y_te) == 0:
+            continue
+
+        X_tr_max = build_pair_diffs_from_indices(X_reduced_max, tr_w, tr_l)
+        X_te_max = build_pair_diffs_from_indices(X_reduced_max, te_w, te_l)
+
+        fold_cache.append({
+            "X_tr_max": X_tr_max,
+            "X_te_max": X_te_max,
+            "n_c_max": n_c_max,
+            "y_tr": y_tr, "w_tr": w_tr, "y_te": y_te,
+        })
+
+    def _eval_dim_algo(dim, a_idx):
+        algo = ALGO_GRID[a_idx]
+        scores = []
+        for fc in fold_cache:
+            n_c = min(dim, fc["n_c_max"])
             if n_c < 2:
                 continue
+            X_tr = fc["X_tr_max"][:, :n_c]
+            X_te = fc["X_te_max"][:, :n_c]
+            y_tr, w_tr, y_te = fc["y_tr"], fc["w_tr"], fc["y_te"]
 
-            pca = PCA(n_components=n_c, random_state=SEED)
-            pca.fit(train_mat)
-            X_reduced = pca.transform(all_mat)
+            clf = algo["make"]()
+            try:
+                clf.fit(X_tr, y_tr, sample_weight=w_tr)
+            except Exception:
+                clf.fit(X_tr, y_tr)
+            preds = clf.predict(X_te)
+            scores.append(accuracy_score(y_te, preds))
+        return dim, a_idx, scores
 
-            X_tr, y_tr, w_tr = fast_pair_diffs(X_reduced, train_imgs)
-            X_te, y_te, _ = fast_pair_diffs(X_reduced, test_imgs)
+    tasks = [(dim, a_idx) for dim in candidate_dims for a_idx in range(len(ALGO_GRID))]
+    results = Parallel(n_jobs=-1, prefer="threads")(
+        delayed(_eval_dim_algo)(dim, a_idx) for dim, a_idx in tasks
+    )
 
-            if len(X_tr) < 4 or len(X_te) == 0:
-                continue
-
-            for a_idx, algo in enumerate(ALGO_GRID):
-                clf = algo["make"]()
-                try:
-                    clf.fit(X_tr, y_tr, sample_weight=w_tr)
-                except Exception:
-                    clf.fit(X_tr, y_tr)
-                preds = clf.predict(X_te)
-                algo_scores[a_idx].append(accuracy_score(y_te, preds))
-
-        for a_idx, algo in enumerate(ALGO_GRID):
-            if algo_scores[a_idx]:
-                mean_acc = float(np.mean(algo_scores[a_idx]))
-                leaderboard.append({
-                    "dim": dim,
-                    "algo": algo["name"],
-                    "accuracy": mean_acc,
-                    "scores": algo_scores[a_idx],
-                })
-                if mean_acc > best_score:
-                    best_score = mean_acc
-                    best_combo = (dim, algo, mean_acc)
+    for dim, a_idx, scores in results:
+        if scores:
+            algo = ALGO_GRID[a_idx]
+            mean_acc = float(np.mean(scores))
+            leaderboard.append({
+                "dim": dim,
+                "algo": algo["name"],
+                "accuracy": mean_acc,
+                "scores": scores,
+            })
+            if mean_acc > best_score:
+                best_score = mean_acc
+                best_combo = (dim, algo, mean_acc)
 
     leaderboard.sort(key=lambda x: x["accuracy"], reverse=True)
 
