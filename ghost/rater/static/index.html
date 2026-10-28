@@ -511,6 +511,8 @@
         <option value="elite">👑 Elite Boss Battles</option>
         <option value="top_bracket">🎯 Top Bracket</option>
         <option value="contrastive">🧬 Contrastive Twins</option>
+        <option value="under_tested">🌱 Unfought / Under-tested</option>
+        <option value="rank_neighbors">⚔️ Rank Neighbors (Swiss)</option>
       </select>
     </div>
     <div class="ctrl-pill">
@@ -647,7 +649,7 @@
       sizeSel.value = savedSize;
     }
     const savedMode = localStorage.getItem('ghost_mode');
-    if (savedMode && modeSel && ['active', 'elite', 'top_bracket', 'contrastive'].includes(savedMode)) {
+    if (savedMode && modeSel && ['active', 'elite', 'top_bracket', 'contrastive', 'under_tested', 'rank_neighbors'].includes(savedMode)) {
       modeSel.value = savedMode;
     }
   } catch (_) {}

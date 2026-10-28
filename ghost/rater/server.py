@@ -1678,7 +1678,11 @@ def serve_image(image_id: int):
     if not p or not p.is_file():
         raise HTTPException(404, "Image not found")
     media_type, _ = mimetypes.guess_type(p.name)
-    return FileResponse(p, media_type=media_type or "image/jpeg")
+    return FileResponse(
+        p,
+        media_type=media_type or "image/jpeg",
+        headers={"Cache-Control": "no-cache, must-revalidate"},
+    )
 
 
 # ═══════════════════════════════════════════════════
@@ -1728,7 +1732,8 @@ def api_next(request: Request, size: int = 3, n: int = 0, domain_id: int = 1,
                   AND is_retest = 0
                   AND created_at <= ?
                   AND sampler IN ('active', 'elite', 'contrastive',
-                                  'top_bracket', 'uncertainty', 'exploration')
+                                  'top_bracket', 'uncertainty', 'exploration',
+                                  'under_tested', 'rank_neighbors')
                   AND group_size = ?
                   AND id NOT IN (
                       SELECT retest_of FROM comparisons
@@ -1824,6 +1829,89 @@ def api_next(request: Request, size: int = 3, n: int = 0, domain_id: int = 1,
                 else:
                     chosen = random.sample(top_pool, min(sz, len(top_pool)))
                     strategy = "top_bracket_exhausted"
+            else:
+                chosen = random.sample(candidates, sz)
+                strategy = "exploration"
+        elif mode == "under_tested":
+            # Count battles for all images in this domain
+            b_counts = {i: 0 for i in all_ids}
+            with db_conn() as c_ut:
+                ut_rows = c_ut.execute(
+                    "SELECT winner_id, losers_json FROM comparisons WHERE domain_id=? AND is_retest=0",
+                    (domain_id,)
+                ).fetchall()
+            for r in ut_rows:
+                wid = r["winner_id"]
+                if wid in b_counts:
+                    b_counts[wid] += 1
+                try:
+                    for lid in json.loads(r["losers_json"]):
+                        if lid in b_counts:
+                            b_counts[lid] += 1
+                except Exception:
+                    pass
+
+            # Sort candidates by fewest battles first
+            cand_sorted = sorted(candidates, key=lambda x: (b_counts.get(x, 0), random.random()))
+            min_b = b_counts.get(cand_sorted[0], 0) if cand_sorted else 0
+            # Pool of images with minimum or near-minimum battles
+            low_pool = [i for i in cand_sorted if b_counts.get(i, 0) <= min_b + 1]
+            if len(low_pool) < sz:
+                low_pool = cand_sorted[: max(sz * 3, 12)]
+
+            # Pick sz - 1 under-tested images and 1 anchor image (with >=3 battles if available)
+            low_subpool = low_pool[: max(sz * 2, 10)]
+            picked_low = random.sample(low_subpool, min(sz - 1, len(low_subpool)))
+            anchors = [i for i in candidates if b_counts.get(i, 0) >= 3 and i not in picked_low]
+            if anchors and sz >= 2 and len(picked_low) == sz - 1:
+                anchor = random.choice(anchors)
+                chosen = picked_low + [anchor]
+                random.shuffle(chosen)
+            else:
+                chosen = random.sample(low_pool[: max(sz * 3, 12)], min(sz, len(low_pool)))
+            strategy = "under_tested"
+        elif scorer.loaded and mode == "rank_neighbors":
+            scored = []
+            for i in all_ids:
+                s = scorer.score(i)
+                if s is not None:
+                    scored.append((s, i))
+            scored.sort(key=lambda x: -x[0])
+
+            if len(scored) >= sz:
+                compared_pairs = get_compared_pairs(domain_id)
+                neighbor_Windows = []
+                # Slide window of adjacent ranks to find unfought neighbors
+                for idx_n in range(len(scored) - 1):
+                    id_a = scored[idx_n][1]
+                    id_b = scored[idx_n + 1][1]
+                    if id_a in recent_shown and id_b in recent_shown:
+                        continue
+                    key = (id_a, id_b) if id_a < id_b else (id_b, id_a)
+                    if key not in compared_pairs:
+                        neighbor_Windows.append(idx_n)
+
+                if neighbor_Windows:
+                    start_idx = random.choice(neighbor_Windows)
+                    chosen = [scored[start_idx][1], scored[start_idx + 1][1]]
+                    # If sz > 2, fill remaining from immediate rank vicinity
+                    vicinity = []
+                    for offset_v in (-2, -1, 2, 3, -3, 4):
+                        v_idx = start_idx + offset_v
+                        if 0 <= v_idx < len(scored):
+                            vid = scored[v_idx][1]
+                            if vid not in chosen:
+                                vicinity.append(vid)
+                    if sz > 2 and vicinity:
+                        chosen.extend(vicinity[: sz - 2])
+                    random.shuffle(chosen)
+                    strategy = "rank_neighbors"
+                else:
+                    # Fallback: pick any adjacent slice
+                    start_idx = random.randint(0, max(0, len(scored) - sz))
+                    chosen = [x[1] for x in scored[start_idx : start_idx + sz]]
+                    random.shuffle(chosen)
+                    strategy = "rank_neighbors"
             else:
                 chosen = random.sample(candidates, sz)
                 strategy = "exploration"

@@ -14,9 +14,17 @@ import sys
 import time
 import warnings
 
+try:
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if hasattr(sys.stderr, "reconfigure"):
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    pass
+
 import numpy as np
 from sklearn.decomposition import PCA
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, RidgeClassifier, SGDClassifier
 from sklearn.svm import LinearSVC
 from sklearn.metrics import accuracy_score
 from sklearn.exceptions import ConvergenceWarning
@@ -33,7 +41,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="sklearn")
 SEED = 42
 N_FOLDS = 5
 
-CANDIDATE_DIMS = [32, 48, 64, 96, 128, 192, 256, 384, 512, 768, 896, 1024]
+CANDIDATE_DIMS = [32, 48, 64, 96, 128, 160, 192, 256, 384, 512, 768, 896, 1024]
 
 ALGO_GRID = [
     # Standard Logistic Regression with varying regularizations (Smooth Bradley-Terry)
@@ -41,16 +49,34 @@ ALGO_GRID = [
     {"name": "Logistic (C=0.5)",  "make": lambda: LogisticRegression(C=0.5, max_iter=1000, solver="lbfgs")},
     {"name": "Logistic (C=1.0)",  "make": lambda: LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs")},
     {"name": "Logistic (C=2.0)",  "make": lambda: LogisticRegression(C=2.0, max_iter=1000, solver="lbfgs")},
+    {"name": "Logistic (C=4.0)",  "make": lambda: LogisticRegression(C=4.0, max_iter=1000, solver="lbfgs")},
 
-    # Linear Support Vector Machines (Max-Margin Hyperplane)
-    {"name": "Linear SVM (C=0.1)", "make": lambda: LinearSVC(C=0.1, max_iter=2000, random_state=SEED)},
-    {"name": "Linear SVM (C=0.5)", "make": lambda: LinearSVC(C=0.5, max_iter=2000, random_state=SEED)},
-    {"name": "Linear SVM (C=1.0)", "make": lambda: LinearSVC(C=1.0, max_iter=2000, random_state=SEED)},
+    # Linear Support Vector Machines (Squared Hinge Max-Margin)
+    {"name": "Linear SVM (C=0.1)", "make": lambda: LinearSVC(C=0.1, max_iter=2500, random_state=SEED)},
+    {"name": "Linear SVM (C=0.5)", "make": lambda: LinearSVC(C=0.5, max_iter=2500, random_state=SEED)},
+    {"name": "Linear SVM (C=1.0)", "make": lambda: LinearSVC(C=1.0, max_iter=2500, random_state=SEED)},
+    {"name": "Linear SVM (C=2.0)", "make": lambda: LinearSVC(C=2.0, max_iter=2500, random_state=SEED)},
+    {"name": "Linear SVM (C=3.0)", "make": lambda: LinearSVC(C=3.0, max_iter=2500, random_state=SEED)},
 
-    # Sparse L1 regularization. NOTE: liblinear does NOT support sample_weight,
-    # so the fallback below fits these WITHOUT pair weights.
+    # L1-Hinge Support Vector Machines (Robust to non-transitive loops & outliers)
+    {"name": "Hinge SVM (C=0.5)",  "make": lambda: LinearSVC(C=0.5, loss="hinge", max_iter=3000, random_state=SEED)},
+    {"name": "Hinge SVM (C=1.0)",  "make": lambda: LinearSVC(C=1.0, loss="hinge", max_iter=3000, random_state=SEED)},
+    {"name": "Hinge SVM (C=2.0)",  "make": lambda: LinearSVC(C=2.0, loss="hinge", max_iter=3000, random_state=SEED)},
+
+    # Closed-Form L2 Ridge Rankers (Fast, analytical global optimum)
+    {"name": "Ridge Ranker (a=0.5)", "make": lambda: RidgeClassifier(alpha=0.5, random_state=SEED)},
+    {"name": "Ridge Ranker (a=1.0)", "make": lambda: RidgeClassifier(alpha=1.0, random_state=SEED)},
+    {"name": "Ridge Ranker (a=2.0)", "make": lambda: RidgeClassifier(alpha=2.0, random_state=SEED)},
+
+    # ElasticNet / Modified Huber (Outlier-tolerant + L1/L2 hybrid with sample_weight support)
+    {"name": "Huber Elastic (a=1e-3)", "make": lambda: SGDClassifier(loss="modified_huber", penalty="elasticnet", l1_ratio=0.3, alpha=1e-3, max_iter=1500, random_state=SEED)},
+
+    # Sparse L1 regularization
     {"name": "Sparse L1 (C=0.5)",  "make": lambda: LogisticRegression(penalty="l1", C=0.5, solver="liblinear", random_state=SEED, max_iter=1000)},
     {"name": "Sparse L1 (C=1.0)",  "make": lambda: LogisticRegression(penalty="l1", C=1.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=2.0)",  "make": lambda: LogisticRegression(penalty="l1", C=2.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=3.0)",  "make": lambda: LogisticRegression(penalty="l1", C=3.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=4.0)",  "make": lambda: LogisticRegression(penalty="l1", C=4.0, solver="liblinear", random_state=SEED, max_iter=1000)},
 ]
 
 
@@ -287,8 +313,8 @@ def train_ghost(domain_id: int = 1) -> dict:
     except Exception:
         final_clf.fit(X_full, y_full)
 
-    coef = final_clf.coef_[0].tolist() if hasattr(final_clf, "coef_") else []
-    intercept = (float(final_clf.intercept_[0])
+    coef = np.atleast_2d(final_clf.coef_)[0].tolist() if hasattr(final_clf, "coef_") else []
+    intercept = (float(np.atleast_1d(final_clf.intercept_)[0])
                  if hasattr(final_clf, "intercept_") else 0.0)
     acc_pct = round(champ_acc * 100, 2)
 
