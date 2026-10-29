@@ -26,3 +26,8 @@ einops>=0.7.0
 
 # Rich terminal dashboard for tournament output (optional fallback if missing)
 rich>=13.7.0
+
+# Standalone Face Mirror Subproject (GPU SCRFD + ArcFace)
+opencv-python>=4.9.0
+onnx>=1.16.0
+onnx2torch>=1.5.15

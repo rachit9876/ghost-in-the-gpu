@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Ghost Face Mirror // GPU ArcFace Lookalike Engine</title>
+<style>
+  :root {
+    --bg: #FFF7E6;
+    --panel: #FFFFFF;
+    --panel-2: #FFFCF0;
+    --ink: #111111;
+    --muted: #5A5243;
+    --accent: #C8FF3D;
+    --like: #2EE6A0;
+    --dislike: #FF5470;
+    --amber: #FFD84D;
+    --violet: #A78BFA;
+    --font-mono: ui-monospace, SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+    --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background-color: var(--bg);
+    background-image: radial-gradient(rgba(17,17,17,.1) 1.5px, transparent 1.5px);
+    background-size: 20px 20px;
+    color: var(--ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: #fff;
+    border-bottom: 3px solid var(--ink);
+    padding: 12px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .brand {
+    font-size: 16px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .gpu-pill {
+    background: var(--like);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 800;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .stat-pill {
+    background: var(--panel-2);
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    padding: 4px 10px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  .btn {
+    border: 2.5px solid var(--ink);
+    background: #fff;
+    color: var(--ink);
+    padding: 8px 14px;
+    border-radius: 9px;
+    font-size: 12px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform .08s, box-shadow .08s, background .12s;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .btn:hover:not(:disabled) {
+    background: var(--accent);
+    transform: translate(-1px, -1px);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+
+  .btn:active:not(:disabled) {
+    transform: translate(2px, 2px);
+    box-shadow: 0 0 0 var(--ink);
+  }
+
+  .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .btn-primary { background: var(--accent); }
+  .btn-like { background: var(--like); }
+
+  .container {
+    max-width: 1320px;
+    margin: 24px auto;
+    padding: 0 20px;
+    width: 100%;
+    display: grid;
+    grid-template-columns: 380px 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 960px) {
+    .container { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: #fff;
+    border: 3px solid var(--ink);
+    border-radius: 14px;
+    padding: 22px;
+    box-shadow: 5px 5px 0 var(--ink);
+    margin-bottom: 20px;
+  }
+
+  .panel-title {
+    font-size: 16px;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .drop-zone {
+    border: 3px dashed var(--ink);
+    border-radius: 12px;
+    background: var(--panel-2);
+    padding: 28px 16px;
+    text-align: center;
+    cursor: pointer;
+    transition: all .15s ease;
+    position: relative;
+  }
+
+  .drop-zone.dragover {
+    background: var(--accent);
+    transform: scale(1.01);
+  }
+
+  .drop-zone img {
+    max-width: 100%;
+    max-height: 240px;
+    border-radius: 8px;
+    border: 2px solid var(--ink);
+    margin-top: 12px;
+    display: none;
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .field-row {
+    margin-bottom: 12px;
+  }
+
+  .field-label {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+  }
+
+  .field-input {
+    width: 100%;
+    padding: 7px 10px;
+    border: 2px solid var(--ink);
+    border-radius: 7px;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .bench-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(145px, 1fr));
+    gap: 10px;
+    margin-top: 12px;
+  }
+
+  .bench-card {
+    border: 2px solid var(--ink);
+    border-radius: 9px;
+    padding: 8px;
+    background: var(--panel-2);
+    font-size: 11px;
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .bench-card.pass {
+    border-color: #059669;
+    background: #ecfdf5;
+  }
+
+  .bench-card.fail {
+    border-color: #e11d48;
+    background: #fff1f2;
+  }
+
+  .results-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+    gap: 16px;
+  }
+
+  .match-card {
+    background: #fff;
+    border: 2.5px solid var(--ink);
+    border-radius: 11px;
+    overflow: hidden;
+    box-shadow: 3px 3px 0 var(--ink);
+    display: flex;
+    flex-direction: column;
+    transition: transform .1s ease;
+  }
+
+  .match-card:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 5px 5px 0 var(--ink);
+  }
+
+  .match-img-wrap {
+    width: 100%;
+    height: 240px;
+    background: #111;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .match-img-wrap img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .rank-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    background: var(--ink);
+    color: var(--accent);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 1.5px solid var(--accent);
+  }
+
+  .sim-badge {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    background: var(--like);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 900;
+    padding: 3px 8px;
+    border-radius: 6px;
+    border: 2px solid var(--ink);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .match-meta {
+    padding: 10px 12px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #fff;
+    border-top: 2px solid var(--ink);
+  }
+
+  .alert-box {
+    border: 2.5px solid var(--ink);
+    background: #FFE9ED;
+    border-radius: 10px;
+    padding: 14px 18px;
+    font-size: 13px;
+    font-weight: 700;
+    margin-bottom: 18px;
+    display: none;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span>🎭 Ghost Face Mirror</span>
+    <span class="gpu-pill" id="gpuPill">GPU: Loading...</span>
+    <span class="stat-pill" id="corpusPill">Face Bank: 0 accepted</span>
+  </div>
+  <div style="display:flex; gap:10px; align-items:center;">
+    <button class="btn btn-primary" id="syncBtn">🔄 Sync New Images</button>
+    <button class="btn" id="benchmarkBtn">🛡️ Verify 7 Benchmark Gates</button>
+  </div>
+</header>
+
+<div class="container">
+  <!-- Left Column: Upload & Quality Gate Thresholds -->
+  <div>
+    <div class="panel">
+      <div class="panel-title">
+        <span>📥 Drop Face to Match</span>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        <div style="font-size:28px; margin-bottom:6px;">📸</div>
+        <div style="font-weight:900; font-size:14px;">Drag & Drop Any Face Image Here</div>
+        <div style="font-size:12px; color:var(--muted); margin-top:4px;">or click to browse file</div>
+        <input type="file" id="fileInput" accept="image/*" style="display:none;" />
+        <img id="previewImg" alt="Uploaded preview" />
+      </div>
+
+      <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:700;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+          <input type="checkbox" id="bypassGateChk" />
+          <span>Allow laxer pose on query image</span>
+        </label>
+        <span id="queryMetricsText" style="font-family:var(--font-mono); font-size:11px; color:var(--muted);"></span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span>⚙️ Strict Face Quality Gate</span>
+      </div>
+      <p style="font-size:12px; color:var(--muted); margin-bottom:14px; line-height:1.45;">
+        Only faces passing all visibility (eyes, nose, lips) and frontal pose angle thresholds are embedded with ArcFace.
+      </p>
+
+      <div class="field-row">
+        <div class="field-label">
+          <span>Min Detection Confidence (Visibility)</span>
+          <span>Default: 0.55</span>
+        </div>
+        <input type="number" step="0.01" class="field-input" id="thDetScore" value="0.55" />
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">
+          <span>Max Yaw Asymmetry (Side Angle)</span>
+          <span>Default: 0.56</span>
+        </div>
+        <input type="number" step="0.01" class="field-input" id="thYaw" value="0.56" />
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">
+          <span>Max 5-Point Alignment Error</span>
+          <span>Default: 4.50</span>
+        </div>
+        <input type="number" step="0.1" class="field-input" id="thAlignErr" value="4.5" />
+      </div>
+
+      <div class="field-row">
+        <div class="field-label">
+          <span>Min Mouth/Lip Edge Ratio (Occlusion)</span>
+          <span>Default: 0.45</span>
+        </div>
+        <input type="number" step="0.01" class="field-input" id="thMouthGrad" value="0.45" />
+      </div>
+
+      <div style="display:flex; gap:8px; margin-top:14px;">
+        <button class="btn btn-like" id="saveThresholdsBtn" style="flex:1; justify-content:center;">💾 Save Thresholds</button>
+        <button class="btn" id="reEvalCorpusBtn" title="Re-filter entire corpus with these thresholds">⚡ Re-Filter All</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right Column: Benchmark Status & Lookalike Results -->
+  <div>
+    <div class="alert-box" id="alertBox"></div>
+
+    <div class="panel" id="benchmarkPanel" style="display:none;">
+      <div class="panel-title">
+        <span>🛡️ Mandatory Elimination Benchmark (Must Reject All 7)</span>
+        <button class="btn" onclick="document.getElementById('benchmarkPanel').style.display='none'" style="padding:3px 8px;">✕</button>
+      </div>
+      <div id="benchmarkSummary" style="font-size:13px; font-weight:800; margin-bottom:8px;"></div>
+      <div class="bench-grid" id="benchGrid"></div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <span id="resultsHeader">🔍 Top Corpus Lookalikes</span>
+        <span id="searchTiming" style="font-family:var(--font-mono); font-size:12px; color:var(--muted);"></span>
+      </div>
+      <div id="resultsEmpty" style="text-align:center; padding:60px 20px; color:var(--muted); font-weight:700;">
+        Drag and drop any portrait image on the left to find its closest facial twins across your entire corpus.
+      </div>
+      <div class="results-grid" id="resultsGrid"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const gpuPill = document.getElementById('gpuPill');
+  const corpusPill = document.getElementById('corpusPill');
+  const dropZone = document.getElementById('dropZone');
+  const fileInput = document.getElementById('fileInput');
+  const previewImg = document.getElementById('previewImg');
+  const bypassGateChk = document.getElementById('bypassGateChk');
+  const queryMetricsText = document.getElementById('queryMetricsText');
+  const alertBox = document.getElementById('alertBox');
+  const resultsGrid = document.getElementById('resultsGrid');
+  const resultsEmpty = document.getElementById('resultsEmpty');
+  const resultsHeader = document.getElementById('resultsHeader');
+  const searchTiming = document.getElementById('searchTiming');
+
+  let lastUploadedFile = null;
+
+  async function loadStatus() {
+    try {
+      const res = await fetch('/api/status');
+      const d = await res.json();
+      if (d.ok) {
+        gpuPill.textContent = `⚡ GPU: ${d.gpu}`;
+        corpusPill.textContent = `Face Bank: ${d.cached_accepted} valid · ${d.cached_rejected} filtered`;
+        if (d.thresholds) {
+          document.getElementById('thDetScore').value = d.thresholds.min_det_score;
+          document.getElementById('thYaw').value = d.thresholds.max_yaw_asymmetry;
+          document.getElementById('thAlignErr').value = d.thresholds.max_align_error;
+          document.getElementById('thMouthGrad').value = d.thresholds.min_mouth_grad_ratio;
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  async function runSearch(file) {
+    if (!file) return;
+    lastUploadedFile = file;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      previewImg.src = e.target.result;
+      previewImg.style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+
+    alertBox.style.display = 'none';
+    resultsEmpty.style.display = 'block';
+    resultsEmpty.textContent = '⏳ Running GPU SCRFD 10G + Pose Check + ArcFace 512D Search...';
+    resultsGrid.innerHTML = '';
+
+    const fd = new FormData();
+    fd.append('file', file);
+    const bypass = bypassGateChk.checked ? 'true' : 'false';
+
+    const t0 = performance.now();
+    try {
+      const res = await fetch(`/api/search?top_k=24&bypass_query_gate=${bypass}`, {
+        method: 'POST',
+        body: fd
+      });
+      const d = await res.json();
+      const elapsedMs = Math.round(performance.now() - t0);
+
+      if (!d.ok && d.rejected) {
+        resultsEmpty.style.display = 'block';
+        resultsEmpty.textContent = 'Query image was rejected by the Face Quality Gate.';
+        alertBox.style.display = 'block';
+        alertBox.innerHTML = `
+          <div>🚫 Face Rejected by Quality Gate: <code>${d.reason}</code></div>
+          <div style="font-size:11px; margin-top:4px; font-weight:600;">
+            Metrics: ${JSON.stringify(d.metrics || {})} — Tip: Check "Allow laxer pose on query image" if you still want to search with this photo.
+          </div>
+        `;
+        return;
+      }
+
+      if (!res.ok) throw new Error(d.detail || 'Search failed');
+
+      searchTiming.textContent = `${d.total_searched} faces searched in ${elapsedMs}ms`;
+      if (d.query_metrics) {
+        queryMetricsText.textContent = `det:${d.query_metrics.score} yaw:${d.query_metrics.yaw_asymmetry}`;
+      }
+
+      if (!d.matches || d.matches.length === 0) {
+        resultsEmpty.style.display = 'block';
+        resultsEmpty.textContent = 'No cached faces found in database. Click "Sync New Images" above!';
+        return;
+      }
+
+      resultsEmpty.style.display = 'none';
+      resultsGrid.innerHTML = d.matches.map(m => `
+        <div class="match-card">
+          <div class="match-img-wrap">
+            <img src="${m.url}" loading="lazy" alt="Image #${m.image_id}" />
+            <span class="rank-badge">#${m.rank}</span>
+            <span class="sim-badge">${m.match_pct}% Match</span>
+          </div>
+          <div class="match-meta">
+            <span><b>ID #${m.image_id}</b> (Dom #${m.domain_id})</span>
+            <span>cos: ${m.cosine_similarity}</span>
+          </div>
+        </div>
+      `).join('');
+    } catch (err) {
+      resultsEmpty.textContent = 'Error: ' + err.message;
+    }
+  }
+
+  dropZone.onclick = () => fileInput.click();
+  fileInput.onchange = (e) => {
+    if (e.target.files && e.target.files[0]) runSearch(e.target.files[0]);
+  };
+
+  dropZone.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    dropZone.classList.add('dragover');
+  });
+  dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+  dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      runSearch(e.dataTransfer.files[0]);
+    }
+  });
+
+  bypassGateChk.onchange = () => {
+    if (lastUploadedFile) runSearch(lastUploadedFile);
+  };
+
+  document.getElementById('syncBtn').onclick = async () => {
+    const btn = document.getElementById('syncBtn');
+    btn.disabled = true;
+    btn.textContent = '⏳ Syncing on GPU...';
+    try {
+      await fetch('/api/sync', { method: 'POST' });
+      await loadStatus();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '🔄 Sync New Images';
+    }
+  };
+
+  document.getElementById('benchmarkBtn').onclick = async () => {
+    const panel = document.getElementById('benchmarkPanel');
+    const grid = document.getElementById('benchGrid');
+    const summary = document.getElementById('benchmarkSummary');
+    panel.style.display = 'block';
+    summary.textContent = '⏳ Testing 7 benchmark images (4, 6, 102, 394, 366, 345, 322) on GPU...';
+    grid.innerHTML = '';
+
+    const res = await fetch('/api/benchmark');
+    const d = await res.json();
+    if (d.all_eliminated) {
+      summary.innerHTML = '<span style="color:#059669;">✓ 100% PASS — All 7 bad visibility & side-angle benchmark images were automatically eliminated!</span>';
+    } else {
+      summary.innerHTML = '<span style="color:#e11d48;">⚠️ WARNING — One or more benchmark images slipped through! Tighten thresholds.</span>';
+    }
+
+    grid.innerHTML = d.benchmarks.map(b => `
+      <div class="bench-card ${b.benchmark_pass ? 'pass' : 'fail'}">
+        <div style="font-weight:900; margin-bottom:4px;">ID #${b.image_id} (${b.category})</div>
+        <div style="font-weight:800; color:${b.benchmark_pass ? '#059669' : '#e11d48'};">
+          ${b.benchmark_pass ? '✓ ELIMINATED' : '✗ ACCEPTED (FAIL)'}
+        </div>
+        <div style="margin-top:4px; color:var(--muted); word-break:break-word;">${b.reason}</div>
+      </div>
+    `).join('');
+  };
+
+  async function updateThresholds(reEval) {
+    const payload = {
+      min_det_score: parseFloat(document.getElementById('thDetScore').value),
+      max_yaw_asymmetry: parseFloat(document.getElementById('thYaw').value),
+      max_align_error: parseFloat(document.getElementById('thAlignErr').value),
+      min_mouth_grad_ratio: parseFloat(document.getElementById('thMouthGrad').value),
+      min_face_size: 45,
+      re_evaluate_corpus: reEval
+    };
+    const btn = reEval ? document.getElementById('reEvalCorpusBtn') : document.getElementById('saveThresholdsBtn');
+    const origText = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = '⏳ Working...';
+    try {
+      await fetch('/api/thresholds', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      await loadStatus();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = origText;
+    }
+  }
+
+  document.getElementById('saveThresholdsBtn').onclick = () => updateThresholds(false);
+  document.getElementById('reEvalCorpusBtn').onclick = () => updateThresholds(true);
+
+  loadStatus();
+})();
+</script>
+</body>
+</html>

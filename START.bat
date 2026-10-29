@@ -59,8 +59,9 @@ if not exist ".venv\Scripts\python.exe" (
         pause
         exit /b 1
     )
-    echo   !YEL![*]!RST! Installing dependencies ^(first run, be patient^)...
+    echo   !YEL![*]!RST! Installing GPU CUDA PyTorch ^& dependencies ^(first run, be patient^)...
     .venv\Scripts\python.exe -m pip install --upgrade pip --quiet
+    .venv\Scripts\python.exe -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu124 --quiet
     .venv\Scripts\python.exe -m pip install -r requirements.txt --quiet
     if !errorlevel! neq 0 (
         echo   !RED![X]!RST! Dependency install failed.

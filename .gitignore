@@ -13,6 +13,11 @@ __pycache__/
 ghost/data/
 *.npy
 
+# Standalone Face Mirror Subproject Caches & Weights
+face_mirror/face_cache.db*
+face_mirror/models/*.pt
+face_mirror/models/*.onnx
+
 # Models & Checkpoints (User multi-domain neural brains & weights)
 ghost/models/*
 !ghost/models/.gitkeep
