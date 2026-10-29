@@ -23,7 +23,8 @@ from typing import Optional, List
 from urllib.parse import urlparse
 
 import numpy as np
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, Request
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Query, Request, Response
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -230,14 +231,31 @@ def get_scorer(domain_id: int = 1) -> GhostScorer:
         return s
 
 
+_IMAGE_PATH_CACHE: dict = {}
+_IMAGE_PATH_LOCK = threading.Lock()
+
+
 def resolve_image_path(image_id: int) -> Optional[Path]:
+    with _IMAGE_PATH_LOCK:
+        cached = _IMAGE_PATH_CACHE.get(image_id)
+        if cached is not None and cached.is_file():
+            return cached
+
     with db_conn() as c:
         row = c.execute(
             "SELECT filename FROM images WHERE id=?", (image_id,)
         ).fetchone()
+
+    p = None
     if row and (IMAGES_DIR / row[0]).is_file():
-        return IMAGES_DIR / row[0]
-    return next(IMAGES_DIR.glob(f"{image_id}.*"), None)
+        p = IMAGES_DIR / row[0]
+    else:
+        p = next(IMAGES_DIR.glob(f"{image_id}.*"), None)
+
+    if p is not None:
+        with _IMAGE_PATH_LOCK:
+            _IMAGE_PATH_CACHE[image_id] = p
+    return p
 
 
 def _prune_comparisons_for_images(c, removed_ids: set,
@@ -531,6 +549,7 @@ class OriginGuardMiddleware(BaseHTTPMiddleware):
         return await call_next(request)
 
 
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(GhostSessionMiddleware)
 app.add_middleware(
     CORSMiddleware,
@@ -758,6 +777,9 @@ def api_delete_domain(domain_id: int):
     brain_p.unlink(missing_ok=True)
     pca_p.unlink(missing_ok=True)
 
+    with _IMAGE_PATH_LOCK:
+        for r in imgs:
+            _IMAGE_PATH_CACHE.pop(r["id"], None)
     with _SCORER_LOCK:
         _SCORERS.pop(domain_id, None)
     _RECENT_SHOWN.pop(domain_id, None)
@@ -972,6 +994,10 @@ def api_bulk_delete(payload: BulkDeleteBody):
         for d_id in affected_domains:
             _prune_comparisons_for_images(c, deleted_ids, domain_id=d_id)
         c.commit()
+
+    with _IMAGE_PATH_LOCK:
+        for _del_id in deleted_ids:
+            _IMAGE_PATH_CACHE.pop(_del_id, None)
 
     with _SCORER_LOCK:
         for scorer in _SCORERS.values():
@@ -1248,6 +1274,9 @@ def api_merge_images(payload: MergeImagesBody):
         (EMBEDDINGS_DIR / f"{retire_id}.npy").unlink(missing_ok=True)
 
     # 6. Invalidate caches
+    with _IMAGE_PATH_LOCK:
+        _IMAGE_PATH_CACHE.pop(retire_id, None)
+        _IMAGE_PATH_CACHE.pop(keep_id, None)
     with _SCORER_LOCK:
         for scorer in _SCORERS.values():
             try:
@@ -1413,6 +1442,8 @@ def api_edit_image(payload: ImageEditBody):
         c.commit()
 
     # 7. Invalidate caches — OUTSIDE the scorer lock to avoid deadlock
+    with _IMAGE_PATH_LOCK:
+        _IMAGE_PATH_CACHE.pop(payload.image_id, None)
     with _SCORER_LOCK:
         for scorer in _SCORERS.values():
             try:
@@ -1636,6 +1667,9 @@ def api_importer_rollback(payload: ImportRollbackBody):
         _PERCENTILE_CACHE.clear()
 
     if removed_ids:
+        with _IMAGE_PATH_LOCK:
+            for iid in removed_ids:
+                _IMAGE_PATH_CACHE.pop(iid, None)
         with _SCORER_LOCK:
             for scorer in _SCORERS.values():
                 for iid in removed_ids:
@@ -1679,15 +1713,32 @@ def api_importer_batches(domain_id: Optional[int] = None):
 # IMAGE SERVING
 # ═══════════════════════════════════════════════════
 @app.get("/api/image/{image_id}")
-def serve_image(image_id: int):
+def serve_image(image_id: int, request: Request):
     p = resolve_image_path(image_id)
     if not p or not p.is_file():
         raise HTTPException(404, "Image not found")
+
+    try:
+        stat = p.stat()
+        etag = f'"{image_id}-{stat.st_size}-{stat.st_mtime_ns}"'
+    except OSError:
+        stat = None
+        etag = None
+
+    if etag:
+        inm = request.headers.get("if-none-match")
+        if inm and inm.strip() == etag:
+            return Response(status_code=304, headers={"ETag": etag, "Cache-Control": "no-cache, must-revalidate"})
+
     media_type, _ = mimetypes.guess_type(p.name)
+    headers = {"Cache-Control": "no-cache, must-revalidate"}
+    if etag:
+        headers["ETag"] = etag
+
     return FileResponse(
         p,
         media_type=media_type or "image/jpeg",
-        headers={"Cache-Control": "no-cache, must-revalidate"},
+        headers=headers,
     )
 
 

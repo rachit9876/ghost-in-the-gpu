@@ -114,8 +114,8 @@ echo.
 :: Background helper waits for TCP 8770 to open, then immediately launches Brave
 start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$d=(Get-Date).AddSeconds(20); while((Get-Date) -lt $d){ try{ $c=New-Object System.Net.Sockets.TcpClient('127.0.0.1',8770); $c.Close(); break } catch{ Start-Sleep -Milliseconds 100 } }; $b1='C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'; $b2=\"$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe\"; if(Test-Path $b1){ Start-Process $b1 'http://127.0.0.1:8770/' } elseif(Test-Path $b2){ Start-Process $b2 'http://127.0.0.1:8770/' } else { Start-Process 'http://127.0.0.1:8770/' }"
 
-:: Run uvicorn directly in THIS terminal so live logs stream here
-.venv\Scripts\python.exe -m uvicorn ghost.rater.server:app --host 127.0.0.1 --port 8770
+:: Run uvicorn directly in THIS terminal with C-accelerated httptools & tuned backlog
+.venv\Scripts\python.exe -m uvicorn ghost.rater.server:app --host 127.0.0.1 --port 8770 --http httptools --backlog 2048
 exit /b 0
 
 :: ─── Browser opener (when reusing existing server) ────
