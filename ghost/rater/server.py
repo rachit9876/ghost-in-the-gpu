@@ -663,6 +663,9 @@ def api_list_domains():
     for d in rows:
         did = d["id"]
         brain_p, _ = get_domain_model_paths(did)
+        scorer = get_scorer(did) if brain_p.exists() else None
+        active_dim = scorer.meta.get("dim") if scorer and scorer.loaded else None
+        active_algo = scorer.meta.get("algo") if scorer and scorer.loaded else None
         out.append({
             "id": did,
             "name": d["name"],
@@ -674,6 +677,8 @@ def api_list_domains():
             "is_trained": brain_p.exists(),
             "accuracy": d["accuracy"],
             "last_trained_at": d["last_trained_at"],
+            "dim": active_dim,
+            "algo": active_algo,
         })
     return {"ok": True, "domains": out}
 
@@ -1789,7 +1794,8 @@ def api_next(request: Request, size: int = 3, n: int = 0, domain_id: int = 1,
                   AND is_retest = 0
                   AND created_at <= ?
                   AND sampler IN ('active', 'elite', 'contrastive',
-                                  'top_bracket', 'uncertainty', 'exploration',
+                                  'top_bracket', 'top_bracket_exhausted',
+                                  'uncertainty', 'exploration',
                                   'under_tested', 'rank_neighbors')
                   AND group_size = ?
                   AND id NOT IN (

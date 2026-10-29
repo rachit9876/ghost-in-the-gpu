@@ -696,17 +696,29 @@
         const agrPct = d.overall_agreement_pct;
         const ci = d.wilson_95_ci;
 
+        const samplerLabels = {
+          'active': '? Active Exploration',
+          'elite': '?? Elite Top Tier',
+          'top_bracket': '?? Top 16 Bracket',
+          'top_bracket_exhausted': '?? Top 16 Bracket (Exhausted)',
+          'under_tested': '?? Unfought / Under-tested',
+          'rank_neighbors': '?? Rank Neighbors (Swiss)',
+          'contrastive': '?? Lookalike Contrastive',
+          'uncertainty': '?? Uncertainty Frontier',
+          'exploration': '?? Exploration'
+        };
+
         let breakdownHtml = '';
         if (d.sampler_breakdown && Object.keys(d.sampler_breakdown).length > 0) {
           breakdownHtml = `
             <div style="margin-top:10px;">
               <div style="font-weight:900; margin-bottom:4px;">Original Sampler Breakdown:</div>
               <table class="mirror-subtable">
-                <thead><tr><th>Sampler</th><th>Retests</th><th>Agreed</th><th>Agreement %</th></tr></thead>
+                <thead><tr><th>Sampler Mode</th><th>Retests</th><th>Agreed</th><th>Agreement %</th></tr></thead>
                 <tbody>
                   ${Object.entries(d.sampler_breakdown).map(([smp, stats]) => `
                     <tr>
-                      <td><b>${smp}</b></td>
+                      <td><b>${samplerLabels[smp] || smp}</b></td>
                       <td>${stats.total}</td>
                       <td>${stats.agreed}</td>
                       <td><b>${stats.agreement_pct}%</b></td>
@@ -724,13 +736,14 @@
             <div style="margin-top:10px;">
               <div style="font-weight:900; margin-bottom:4px;">Recent Test-Retest Audit Trail:</div>
               <table class="mirror-subtable">
-                <thead><tr><th>Date</th><th>Orig ID</th><th>Result</th><th>Orig Winner</th><th>Retest Winner</th></tr></thead>
+                <thead><tr><th>Date</th><th>Orig ID</th><th>Mode</th><th>Result</th><th>Orig Winner</th><th>Retest Winner</th></tr></thead>
                 <tbody>
                   ${d.recent_retests.map(r => `
                     <tr>
                       <td style="color:#666;">${r.date}</td>
                       <td>#${r.original_id}</td>
-                      <td>${r.agreed ? '<span style="color:#10b981;font-weight:900;">✓ Agreed</span>' : '<span style="color:#ef4444;font-weight:900;">⚡ Flipped</span>'}</td>
+                      <td><span style="font-size:10px; font-weight:700;">${samplerLabels[r.sampler] || r.sampler || 'active'}</span></td>
+                      <td>${r.agreed ? '<span style="color:#10b981;font-weight:900;">? Agreed</span>' : '<span style="color:#ef4444;font-weight:900;">? Flipped</span>'}</td>
                       <td>Img #${r.winner_orig}</td>
                       <td>Img #${r.winner_retest}</td>
                     </tr>

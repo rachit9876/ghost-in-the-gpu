@@ -261,10 +261,29 @@
     font-size: 10px;
     font-weight: 900;
     text-transform: uppercase;
+    letter-spacing: .05em;
     padding: 2px 6px;
-    border-radius: 5px;
-    background: var(--ink);
-    color: var(--accent);
+    border-radius: 6px;
+    background: #111;
+    color: #FFD84D;
+    border: 1.5px solid #111;
+    box-shadow: 1px 1px 0 rgba(0,0,0,0.25);
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .dim-pill.champion-pill {
+    border: 3px solid #059669 !important;
+    box-shadow: 3px 3px 0 #059669 !important;
+    position: relative;
+  }
+
+  .dim-pill.champion-pill.active {
+    background: #2EE6A0 !important;
+    border: 3px solid #111 !important;
+    box-shadow: 4px 4px 0 #111 !important;
   }
 
   .dim-speed {
@@ -381,7 +400,7 @@
     <div class="presets-bar">
       <span style="font-size:12px; font-weight:900; text-transform:uppercase; color:var(--muted); margin-right:4px;">Quick Presets:</span>
       <button class="preset-btn" id="presetFast" type="button">⚡ Fast Sweet-Spot (96D–256D)</button>
-      <button class="preset-btn" id="presetSweet" type="button">👑 160D Peak Only</button>
+      <button class="preset-btn" id="presetSweet" type="button">👑 Champion Peak Only</button>
       <button class="preset-btn" id="presetFull" type="button">🔍 Check All (All 13 Ds)</button>
       <button class="preset-btn" id="presetClear" type="button">✕ Uncheck All</button>
     </div>
@@ -410,8 +429,8 @@
     { d: 64,   label: '64D',   speed: 'Ultra Fast' },
     { d: 96,   label: '96D',   speed: 'Fast' },
     { d: 128,  label: '128D',  speed: 'Fast' },
-    { d: 160,  label: '160D',  speed: 'Sweet Spot', sweet: true, tag: 'PEAK 👑' },
-    { d: 192,  label: '192D',  speed: 'High Acc',   sweet: true },
+    { d: 160,  label: '160D',  speed: 'Sweet Spot' },
+    { d: 192,  label: '192D',  speed: 'High Acc' },
     { d: 256,  label: '256D',  speed: 'Balanced' },
     { d: 384,  label: '384D',  speed: 'Moderate' },
     { d: 512,  label: '512D',  speed: 'Slower' },
@@ -419,6 +438,8 @@
     { d: 896,  label: '896D',  speed: 'Heavy' },
     { d: 1024, label: '1024D', speed: 'Max Dim' }
   ];
+
+  let activePeakDim = null;
 
   // Default: Fast & Recommended sweet-spot range
   let selectedDims = new Set([96, 128, 160, 192, 256]);
@@ -455,17 +476,22 @@
     dimsGrid.innerHTML = '';
     ALL_DIMS.forEach(item => {
       const isChecked = selectedDims.has(item.d);
+      const isPeak = (activePeakDim !== null && Number(item.d) === Number(activePeakDim));
       const el = document.createElement('div');
-      el.className = `dim-pill ${isChecked ? 'active' : ''} ${item.sweet ? 'sweet-spot' : ''}`;
+      el.className = `dim-pill ${isChecked ? 'active' : ''} ${isPeak ? 'champion-pill' : ''}`;
 
-      const tagHtml = item.tag ? `<span class="dim-tag">${item.tag}</span>` : '';
+      let tagHtml = '';
+      if (isPeak) {
+        tagHtml = '<span class="dim-tag">PEAK 👑</span>';
+      }
+
       el.innerHTML = `
         <div class="dim-header">
           <input type="checkbox" ${isChecked ? 'checked' : ''} style="pointer-events:none; accent-color:#111; width:15px; height:15px;" />
           <span class="dim-name">${item.label}</span>
           ${tagHtml}
         </div>
-        <div class="dim-speed">${item.speed}</div>
+        <div class="dim-speed">${isPeak ? 'Active Champion' : item.speed}</div>
       `;
 
       el.onclick = () => {
@@ -508,8 +534,9 @@
     updateSummary();
   };
 
-  document.getElementById('presetSweet').onclick = () => {
-    selectedDims = new Set([160]);
+  const presetSweetBtn = document.getElementById('presetSweet');
+  presetSweetBtn.onclick = () => {
+    selectedDims = new Set([activePeakDim]);
     renderDims();
     updateSummary();
   };
@@ -538,7 +565,16 @@
         document.getElementById('statImages').textContent = `${(dom.image_count || 0).toLocaleString()} images`;
         if (dom.is_trained) {
           const accStr = dom.accuracy != null ? `${Number(dom.accuracy).toFixed(2)}% CV` : 'Trained';
+          const modelAlgo = dom.algo ? ` · ${dom.algo}` : '';
           document.getElementById('statAccuracy').textContent = `🧠 ${accStr}`;
+          if (dom.dim) {
+            activePeakDim = dom.dim;
+            presetSweetBtn.textContent = `👑 ${activePeakDim}D Peak Only`;
+            // Ensure champion dim is included in selection
+            selectedDims.add(activePeakDim);
+            renderDims();
+            updateSummary();
+          }
         } else {
           document.getElementById('statAccuracy').textContent = '⚡ Untrained';
         }
