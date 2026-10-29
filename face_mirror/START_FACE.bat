@@ -88,7 +88,8 @@ echo   !GRN![OK]!RST! Port 8775 ready.
 :: ─── 5/5 Launch Server & Open Browser ────────────────
 echo !DIM![5/5]!RST! !CYN!Launching Ghost Face Mirror UI at http://127.0.0.1:8775!RST!...
 echo.
-start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$d=(Get-Date).AddSeconds(20); while((Get-Date) -lt $d){ try{ $c=New-Object System.Net.Sockets.TcpClient('127.0.0.1',8775); $c.Close(); break } catch{ Start-Sleep -Milliseconds 100 } }; Start-Process 'http://127.0.0.1:8775/'"
+:: Background helper waits for TCP 8775 to open, then opens Brave if found, else default browser
+start "" /b powershell -NoProfile -WindowStyle Hidden -Command "$d=(Get-Date).AddSeconds(20); while((Get-Date) -lt $d){ try{ $c=New-Object System.Net.Sockets.TcpClient('127.0.0.1',8775); $c.Close(); break } catch{ Start-Sleep -Milliseconds 100 } }; $b1='C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe'; $b2=\"$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\Application\brave.exe\"; if(Test-Path $b1){ Start-Process $b1 'http://127.0.0.1:8775/' } elseif(Test-Path $b2){ Start-Process $b2 'http://127.0.0.1:8775/' } else { Start-Process 'http://127.0.0.1:8775/' }"
 
 .venv\Scripts\python.exe -m uvicorn face_mirror.server:app --host 127.0.0.1 --port 8775 --http httptools --backlog 2048
 exit /b 0

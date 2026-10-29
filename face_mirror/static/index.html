@@ -416,7 +416,18 @@
     <div class="panel">
       <div class="panel-title">
         <span id="resultsHeader">🔍 Top Corpus Lookalikes</span>
-        <span id="searchTiming" style="font-family:var(--font-mono); font-size:12px; color:var(--muted);"></span>
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="display:flex; align-items:center; gap:6px; font-size:12px; font-weight:800;">
+            <label for="topKSelect" style="color:var(--muted); text-transform:uppercase; font-size:11px;">Show:</label>
+            <select id="topKSelect" style="padding:4px 8px; border:2px solid var(--ink); border-radius:6px; font-family:var(--font-mono); font-weight:800; background:#fff; cursor:pointer;">
+              <option value="12">Top 12</option>
+              <option value="24" selected>Top 24</option>
+              <option value="48">Top 48</option>
+              <option value="96">Top 96</option>
+            </select>
+          </div>
+          <span id="searchTiming" style="font-family:var(--font-mono); font-size:12px; color:var(--muted);"></span>
+        </div>
       </div>
       <div id="resultsEmpty" style="text-align:center; padding:60px 20px; color:var(--muted); font-weight:700;">
         Drag and drop any portrait image on the left to find its closest facial twins across your entire corpus.
@@ -440,6 +451,7 @@
   const resultsEmpty = document.getElementById('resultsEmpty');
   const resultsHeader = document.getElementById('resultsHeader');
   const searchTiming = document.getElementById('searchTiming');
+  const topKSelect = document.getElementById('topKSelect');
 
   let lastUploadedFile = null;
 
@@ -481,10 +493,11 @@
     const fd = new FormData();
     fd.append('file', file);
     const bypass = bypassGateChk.checked ? 'true' : 'false';
+    const topK = topKSelect ? topKSelect.value : '24';
 
     const t0 = performance.now();
     try {
-      const res = await fetch(`/api/search?top_k=24&bypass_query_gate=${bypass}`, {
+      const res = await fetch(`/api/search?top_k=${topK}&bypass_query_gate=${bypass}`, {
         method: 'POST',
         body: fd
       });
@@ -555,6 +568,10 @@
   });
 
   bypassGateChk.onchange = () => {
+    if (lastUploadedFile) runSearch(lastUploadedFile);
+  };
+
+  topKSelect.onchange = () => {
     if (lastUploadedFile) runSearch(lastUploadedFile);
   };
 
