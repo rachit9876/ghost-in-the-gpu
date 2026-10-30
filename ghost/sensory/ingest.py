@@ -112,6 +112,9 @@ def _decode_and_normalize(raw_bytes: bytes):
     except Exception:
         pass
 
+    if getattr(pil_img, "is_animated", False) and getattr(pil_img, "n_frames", 1) > 1:
+        return pil_img, real_ext
+
     return pil_img.convert("RGB"), real_ext
 
 
@@ -165,8 +168,11 @@ def ingest_bytes(raw_bytes: bytes, domain_id: int = 1, ext: str = ".jpg",
     # 4. Embed (unless reused).
     if vec is None:
         try:
-            from ghost.sensory.backbone import embed_image
-            vec = embed_image(pil_img)
+            from ghost.sensory.backbone import embed_image, embed_animated_gif
+            if getattr(pil_img, "is_animated", False) and getattr(pil_img, "n_frames", 1) > 1:
+                vec = embed_animated_gif(pil_img)
+            else:
+                vec = embed_image(pil_img)
         except Exception as e:
             return {"ok": False, "status": "error",
                     "error": f"Failed to embed image: {e}"}

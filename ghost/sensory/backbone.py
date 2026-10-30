@@ -95,6 +95,12 @@ def embed_image(pil_img, n_crops: int = 6) -> np.ndarray:
     be used in production paths. The `n_crops` argument is ignored (aspect
     determines N) — kept for backward compatibility with existing callers.
     """
+    if isinstance(pil_img, (str, Path)):
+        pil_img = Image.open(pil_img)
+
+    if getattr(pil_img, "is_animated", False) and getattr(pil_img, "n_frames", 1) > 1:
+        return embed_animated_gif(pil_img)
+
     model, transform, device = get_vision_model()
     W, H = pil_img.size
     
@@ -114,6 +120,35 @@ def embed_image(pil_img, n_crops: int = 6) -> np.ndarray:
     avg = np.mean(embs, axis=0)
     avg = avg / np.linalg.norm(avg)
     return avg.astype(np.float32)
+
+
+def embed_animated_gif(pil_img, sample_percentages=(0.0, 0.15, 0.30, 0.50, 0.70, 0.85, 1.0)) -> np.ndarray:
+    n_frames = getattr(pil_img, 'n_frames', 1)
+    if n_frames <= 1:
+        return embed_image(pil_img.convert('RGB'))
+
+    target_indices = sorted(list({
+        int(round(p * (n_frames - 1))) for p in sample_percentages
+    }))
+
+    frame_embs = []
+    for idx in target_indices:
+        try:
+            pil_img.seek(idx)
+            frame_rgb = pil_img.convert('RGB')
+            frame_vec = embed_image(frame_rgb)
+            frame_embs.append(frame_vec)
+        except Exception as e:
+            log.warning('Failed to extract frame %d of %d: %s', idx, n_frames, e)
+
+    if not frame_embs:
+        return embed_image(pil_img.convert('RGB'))
+
+    temporal_avg = np.mean(frame_embs, axis=0)
+    norm = np.linalg.norm(temporal_avg)
+    if norm > 1e-12:
+        temporal_avg = temporal_avg / norm
+    return temporal_avg.astype(np.float32)
 
 
 def _generate_smart_crops(pil_img, min_n: int = 3, max_n: int = 8):

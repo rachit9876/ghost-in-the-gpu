@@ -40,9 +40,7 @@ def reembed_domain(domain_id: int = 1, backup: bool = True, dry_run: bool = Fals
             print(f"  [{i}/{total}] #{r['id']}: file missing, skip")
             continue
         try:
-            with Image.open(p) as im:
-                pil_img = im.convert("RGB")
-            vec = embed_image_multicrop(pil_img, n_crops=6)
+            vec = embed_image_multicrop(p, n_crops=6)
             np.save(EMBEDDINGS_DIR / f"{r['id']}.npy", vec)
             if i % 100 == 0 or i == total:
                 print(f"  [{i}/{total}] #{r['id']}: done")
