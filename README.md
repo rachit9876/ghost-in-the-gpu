@@ -3,7 +3,7 @@
 
 <div align="left">
 
-| <img src="https://c.tenor.com/9cKSzp6bXDoAAAAd/tenor.gif" height="200" /> | <img src="https://media1.tenor.com/m/YCDZqTrwaD0AAAAd/tao-bittensor.gif" height="200" /> | <img src="https://i.ibb.co/n8ZzPk8v/ezgif-52682a965d19d2a7.gif" height="200" />|
+| <img src="https://c.tenor.com/9cKSzp6bXDoAAAAd/tenor.gif" height="200" /> | <img src="https://i.ibb.co/n8ZzPk8v/ezgif-52682a965d19d2a7.gif" height="200" /> | <img src="https://media1.tenor.com/m/YCDZqTrwaD0AAAAd/tao-bittensor.gif" height="200" /> |
 | :---: | :---: | :---: |
 
 </div>
