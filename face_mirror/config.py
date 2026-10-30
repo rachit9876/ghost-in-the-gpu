@@ -31,6 +31,7 @@ DEFAULT_THRESHOLDS = {
     "max_align_error": 7.5,         # Accommodates natural human pitch/upward angles while eliminating unnatural distortions
     "min_mouth_grad_ratio": 0.45,   # Eliminates #4 (0.34) where lower face/mouth is covered
     "min_face_size": 45,            # Minimum pixel width/height of face bounding box
+    "min_sharpness": 15.0,          # Eliminates motion-blurred/smeared faces like #10622 (score 4.8)
 }
 
 FACE_HOST = "127.0.0.1"

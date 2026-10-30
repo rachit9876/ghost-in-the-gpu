@@ -226,6 +226,73 @@
     background: #fff1f2;
   }
 
+  /* Multi-face picker thumbnails */
+  .face-picker-row {
+    margin-top: 14px;
+    padding: 10px;
+    border: 2px dashed var(--ink);
+    border-radius: 9px;
+    background: var(--panel-2);
+    display: none;
+  }
+
+  .face-picker-header {
+    font-size: 11px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+    display: flex;
+    justify-content: space-between;
+  }
+
+  .face-picker-cards {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+
+  .face-chip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    border: 2px solid var(--ink);
+    border-radius: 8px;
+    background: #fff;
+    padding: 6px;
+    cursor: pointer;
+    transition: all .15s ease;
+    user-select: none;
+    min-width: 72px;
+  }
+
+  .face-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 2px 2px 0 var(--ink);
+  }
+
+  .face-chip.active {
+    border-color: var(--ink);
+    background: #fef08a;
+    box-shadow: 3px 3px 0 var(--ink);
+    font-weight: 900;
+  }
+
+  .face-chip img {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border-radius: 6px;
+    border: 1.5px solid var(--ink);
+  }
+
+  .face-chip span {
+    font-size: 10px;
+    margin-top: 4px;
+    font-family: var(--font-mono);
+  }
+
   .results-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -345,11 +412,17 @@
       </div>
 
       <div style="margin-top:12px; display:flex; align-items:center; justify-content:space-between; font-size:12px; font-weight:700;">
-        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
-          <input type="checkbox" id="bypassGateChk" />
-          <span>Allow laxer pose on query image</span>
-        </label>
+        <span style="font-size:11px; text-transform:uppercase; color:var(--muted); letter-spacing:.03em;">Query Mode: Direct Face Extract</span>
         <span id="queryMetricsText" style="font-family:var(--font-mono); font-size:11px; color:var(--muted);"></span>
+      </div>
+
+      <!-- Multi-Face Selector Row (auto-displayed when 2+ faces exist) -->
+      <div class="face-picker-row" id="facePickerRow">
+        <div class="face-picker-header">
+          <span id="facePickerLabel">👥 Multiple Faces Detected</span>
+          <span style="color:var(--ink);">Click to Match</span>
+        </div>
+        <div class="face-picker-cards" id="facePickerCards"></div>
       </div>
     </div>
 
@@ -444,7 +517,6 @@
   const dropZone = document.getElementById('dropZone');
   const fileInput = document.getElementById('fileInput');
   const previewImg = document.getElementById('previewImg');
-  const bypassGateChk = document.getElementById('bypassGateChk');
   const queryMetricsText = document.getElementById('queryMetricsText');
   const alertBox = document.getElementById('alertBox');
   const resultsGrid = document.getElementById('resultsGrid');
@@ -452,8 +524,12 @@
   const resultsHeader = document.getElementById('resultsHeader');
   const searchTiming = document.getElementById('searchTiming');
   const topKSelect = document.getElementById('topKSelect');
+  const facePickerRow = document.getElementById('facePickerRow');
+  const facePickerCards = document.getElementById('facePickerCards');
+  const facePickerLabel = document.getElementById('facePickerLabel');
 
   let lastUploadedFile = null;
+  let currentFaceIndex = 0;
 
   async function loadStatus() {
     try {
@@ -474,9 +550,10 @@
     }
   }
 
-  async function runSearch(file) {
+  async function runSearch(file, targetFaceIndex = 0) {
     if (!file) return;
     lastUploadedFile = file;
+    currentFaceIndex = targetFaceIndex;
 
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -492,12 +569,11 @@
 
     const fd = new FormData();
     fd.append('file', file);
-    const bypass = bypassGateChk.checked ? 'true' : 'false';
     const topK = topKSelect ? topKSelect.value : '24';
 
     const t0 = performance.now();
     try {
-      const res = await fetch(`/api/search?top_k=${topK}&bypass_query_gate=${bypass}`, {
+      const res = await fetch(`/api/search?top_k=${topK}&face_index=${targetFaceIndex}`, {
         method: 'POST',
         body: fd
       });
@@ -505,13 +581,14 @@
       const elapsedMs = Math.round(performance.now() - t0);
 
       if (!d.ok && d.rejected) {
+        facePickerRow.style.display = 'none';
         resultsEmpty.style.display = 'block';
-        resultsEmpty.textContent = 'Query image was rejected by the Face Quality Gate.';
+        resultsEmpty.textContent = 'No face could be found in the uploaded image.';
         alertBox.style.display = 'block';
         alertBox.innerHTML = `
-          <div>🚫 Face Rejected by Quality Gate: <code>${d.reason}</code></div>
+          <div>🚫 No Face Detected: <code>${d.reason}</code></div>
           <div style="font-size:11px; margin-top:4px; font-weight:600;">
-            Metrics: ${JSON.stringify(d.metrics || {})} — Tip: Check "Allow laxer pose on query image" if you still want to search with this photo.
+            Please upload an image containing at least one recognizable human face.
           </div>
         `;
         return;
@@ -519,9 +596,32 @@
 
       if (!res.ok) throw new Error(d.detail || 'Search failed');
 
+      // Populate multi-face picker if 2 or more faces detected
+      if (d.all_faces && d.all_faces.length > 1) {
+        facePickerRow.style.display = 'block';
+        facePickerLabel.textContent = `👥 ${d.all_faces.length} Faces Detected in Photo`;
+        facePickerCards.innerHTML = d.all_faces.map((f, i) => `
+          <div class="face-chip ${i === d.selected_index ? 'active' : ''}" data-idx="${f.face_index}">
+            <img src="${f.thumb_b64 || previewImg.src}" alt="Face #${i + 1}" />
+            <span>Face #${i + 1}</span>
+          </div>
+        `).join('');
+
+        facePickerCards.querySelectorAll('.face-chip').forEach(chip => {
+          chip.onclick = (e) => {
+            const idx = parseInt(chip.getAttribute('data-idx'), 10);
+            if (idx !== currentFaceIndex && lastUploadedFile) {
+              runSearch(lastUploadedFile, idx);
+            }
+          };
+        });
+      } else {
+        facePickerRow.style.display = 'none';
+      }
+
       searchTiming.textContent = `${d.total_searched} faces searched in ${elapsedMs}ms`;
       if (d.query_metrics) {
-        queryMetricsText.textContent = `det:${d.query_metrics.score} yaw:${d.query_metrics.yaw_asymmetry}`;
+        queryMetricsText.textContent = `Face #${(d.selected_index || 0) + 1} · det:${d.query_metrics.score} yaw:${d.query_metrics.yaw_asymmetry}`;
       }
 
       if (!d.matches || d.matches.length === 0) {
@@ -567,12 +667,8 @@
     }
   });
 
-  bypassGateChk.onchange = () => {
-    if (lastUploadedFile) runSearch(lastUploadedFile);
-  };
-
   topKSelect.onchange = () => {
-    if (lastUploadedFile) runSearch(lastUploadedFile);
+    if (lastUploadedFile) runSearch(lastUploadedFile, currentFaceIndex);
   };
 
   document.getElementById('syncBtn').onclick = async () => {

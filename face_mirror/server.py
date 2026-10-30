@@ -170,10 +170,12 @@ def api_run_benchmark():
 async def api_search_face(
     file: UploadFile = File(...),
     top_k: int = Query(24, ge=1, le=100),
+    face_index: int = Query(0, ge=0),
     domain_id: Optional[int] = Query(None),
-    bypass_query_gate: bool = Query(False),
 ):
-    """Accepts a dragged-and-dropped image, runs GPU SCRFD + ArcFace, and returns top-K lookalikes."""
+    """Accepts a dragged-and-dropped image, detects all faces, extracts ArcFace 512D for selected face_index,
+    and returns top-K lookalikes alongside thumbnail crops for all detected faces in the image.
+    """
     raw_bytes = await file.read()
     arr = np.frombuffer(raw_bytes, dtype=np.uint8)
     img_bgr = cv2.imdecode(arr, cv2.IMREAD_COLOR)
@@ -181,28 +183,14 @@ async def api_search_face(
         raise HTTPException(400, "Could not decode uploaded image file.")
 
     eng = get_engine()
-    th = get_thresholds()
-
-    if bypass_query_gate:
-        # Allow laxer gate on query image if user forces search on a tricky query photo
-        query_th = {
-            "min_det_score": 0.35,
-            "max_yaw_asymmetry": 1.2,
-            "max_align_error": 8.0,
-            "min_mouth_grad_ratio": 0.20,
-            "min_face_size": 30,
-        }
-    else:
-        query_th = th
-
-    q_res = eng.process_image(img_bgr, thresholds=query_th)
+    q_res = eng.process_query_image(img_bgr, face_index=face_index)
     if q_res["status"] != "accepted" or q_res["embedding"] is None:
         return {
             "ok": False,
             "rejected": True,
             "reason": q_res["reason"],
-            "metrics": q_res["metrics"],
-            "message": f"Uploaded image did not pass face quality gate: {q_res['reason']}",
+            "metrics": q_res.get("metrics"),
+            "message": "No face could be found in the uploaded image.",
         }
 
     q_vec = q_res["embedding"]  # L2-normalized 512D float32
@@ -268,6 +256,9 @@ async def api_search_face(
 
     return {
         "ok": True,
+        "selected_index": q_res.get("selected_index", 0),
+        "faces_found": q_res.get("faces_found", 1),
+        "all_faces": q_res.get("all_faces", []),
         "query_metrics": q_res["metrics"],
         "total_searched": len(vecs),
         "matches": matches,

@@ -36,7 +36,7 @@ class GPUFaceEngine:
         self.det_model = torch.load(SCRFD_PT_PATH, map_location=self.device, weights_only=False).eval().to(self.device)
         self.rec_model = torch.load(ARCFACE_PT_PATH, map_location=self.device, weights_only=False).eval().to(self.device)
 
-    def detect_raw(self, img_bgr: np.ndarray, input_size=(640, 640), score_thresh=0.25):
+    def detect_raw(self, img_bgr: np.ndarray, input_size=(640, 640), score_thresh=0.10):
         """Runs SCRFD 10G on GPU and returns all raw candidate faces before quality filtering."""
         if img_bgr is None or img_bgr.size == 0:
             return []
@@ -244,6 +244,29 @@ class GPUFaceEngine:
                 "mouth_grad_ratio": mouth_grad_ratio,
             }
 
+        # 5. Face Sharpness / Clarity Gate (eliminates motion blur & hair smearing like Image #10622)
+        min_sharpness = th.get("min_sharpness", 15.0)
+        bx1 = max(0, int(bbox[0]))
+        by1 = max(0, int(bbox[1]))
+        bx2 = min(img_bgr.shape[1], int(bbox[2]))
+        by2 = min(img_bgr.shape[0], int(bbox[3]))
+        box_crop = img_bgr[by1:by2, bx1:bx2]
+        if box_crop.size > 0:
+            laplacian_var = float(cv2.Laplacian(cv2.cvtColor(box_crop, cv2.COLOR_BGR2GRAY), cv2.CV_64F).var())
+        else:
+            laplacian_var = 0.0
+
+        if laplacian_var < min_sharpness:
+            return {
+                "passed": False,
+                "reason": f"motion_blur_or_low_sharpness (sharpness={laplacian_var:.1f} < {min_sharpness:.1f})",
+                "score": score,
+                "yaw_asymmetry": yaw_asymmetry,
+                "align_error": align_error,
+                "mouth_grad_ratio": mouth_grad_ratio,
+                "sharpness": laplacian_var,
+            }
+
         return {
             "passed": True,
             "reason": "valid_frontal_face",
@@ -251,6 +274,7 @@ class GPUFaceEngine:
             "yaw_asymmetry": yaw_asymmetry,
             "align_error": align_error,
             "mouth_grad_ratio": mouth_grad_ratio,
+            "sharpness": laplacian_var,
             "bbox": bbox.tolist(),
             "kps": kps.tolist(),
             "warped_bgr": warped,
@@ -319,5 +343,103 @@ class GPUFaceEngine:
                 "yaw_asymmetry": round(best["yaw_asymmetry"], 3),
                 "align_error": round(best["align_error"], 3),
                 "mouth_grad_ratio": round(best["mouth_grad_ratio"], 3),
+            },
+        }
+
+    def process_query_image(self, img_bgr: np.ndarray, face_index: int = 0) -> dict:
+        """Processes a user-uploaded search image:
+        Detects all candidate faces, returns thumbnail crops + bboxes for all of them,
+        and extracts the 512D ArcFace vector for the selected face_index.
+        """
+        raw_faces = self.detect_raw(img_bgr, score_thresh=0.10)
+        if not raw_faces:
+            return {
+                "status": "rejected",
+                "reason": "no_face_detected",
+                "faces_found": 0,
+                "embedding": None,
+                "metrics": None,
+                "all_faces": [],
+            }
+
+        # Sort faces: largest area first
+        def face_sort_key(f):
+            box = f["bbox"]
+            return float(box[2] - box[0]) * float(box[3] - box[1])
+
+        sorted_faces = sorted(raw_faces, key=face_sort_key, reverse=True)
+
+        # Build thumbnail metadata and base64 crops for all detected faces
+        all_faces_meta = []
+        h, w = img_bgr.shape[:2]
+        import base64
+
+        for idx, f in enumerate(sorted_faces):
+            box = f["bbox"]
+            x1 = max(0, int(box[0]))
+            y1 = max(0, int(box[1]))
+            x2 = min(w, int(box[2]))
+            y2 = min(h, int(box[3]))
+
+            # Pad face crop slightly for thumbnail display
+            pad_x = int((x2 - x1) * 0.15)
+            pad_y = int((y2 - y1) * 0.15)
+            cx1, cy1 = max(0, x1 - pad_x), max(0, y1 - pad_y)
+            cx2, cy2 = min(w, x2 + pad_x), min(h, y2 + pad_y)
+            crop = img_bgr[cy1:cy2, cx1:cx2]
+
+            thumb_b64 = ""
+            if crop.size > 0:
+                thumb = cv2.resize(crop, (96, 96))
+                _, buf = cv2.imencode(".jpg", thumb, [int(cv2.IMWRITE_JPEG_QUALITY), 80])
+                thumb_b64 = "data:image/jpeg;base64," + base64.b64encode(buf).decode("utf-8")
+
+            all_faces_meta.append({
+                "face_index": idx,
+                "score": round(float(f["score"]), 3),
+                "bbox": [round(float(v), 1) for v in box],
+                "thumb_b64": thumb_b64,
+            })
+
+        # Ensure selected index is valid
+        if face_index < 0 or face_index >= len(sorted_faces):
+            face_index = 0
+
+        target_face = sorted_faces[face_index]
+        kps = target_face["kps"]
+        M = cv2.estimateAffinePartial2D(kps, ARCFACE_SRC)[0]
+        if M is None:
+            src_3 = kps[:3]
+            dst_3 = ARCFACE_SRC[:3]
+            M = cv2.getAffineTransform(src_3.astype(np.float32), dst_3.astype(np.float32))
+
+        warped = cv2.warpAffine(img_bgr, M, (112, 112))
+        emb = self.extract_embedding(warped)
+
+        # Calculate metrics for informational display
+        dx = float(kps[1][0] - kps[0][0])
+        dy = float(kps[1][1] - kps[0][1])
+        eye_dist = max(float(np.sqrt(dx * dx + dy * dy)), 1.0)
+        d_left = max(float(np.linalg.norm(kps[2] - kps[0])), 1e-3)
+        d_right = max(float(np.linalg.norm(kps[2] - kps[1])), 1e-3)
+        yaw_asymmetry = abs(d_left - d_right) / eye_dist
+
+        kps_homo = np.hstack([kps, np.ones((5, 1), dtype=np.float32)])
+        kps_aligned = (M @ kps_homo.T).T
+        align_error = float(np.mean(np.linalg.norm(kps_aligned - ARCFACE_SRC, axis=1)))
+
+        return {
+            "status": "accepted",
+            "reason": "query_face_processed",
+            "selected_index": face_index,
+            "faces_found": len(sorted_faces),
+            "all_faces": all_faces_meta,
+            "embedding": emb,
+            "bbox": target_face["bbox"].tolist(),
+            "kps": kps.tolist(),
+            "metrics": {
+                "score": round(float(target_face["score"]), 3),
+                "yaw_asymmetry": round(yaw_asymmetry, 3),
+                "align_error": round(align_error, 3),
             },
         }
