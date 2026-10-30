@@ -51,6 +51,8 @@ ALGO_GRID = [
     {"name": "Logistic (C=1.0)",  "make": lambda: LogisticRegression(C=1.0, max_iter=1000, solver="lbfgs")},
     {"name": "Logistic (C=2.0)",  "make": lambda: LogisticRegression(C=2.0, max_iter=1000, solver="lbfgs")},
     {"name": "Logistic (C=4.0)",  "make": lambda: LogisticRegression(C=4.0, max_iter=1000, solver="lbfgs")},
+    {"name": "Logistic (C=5.0)",  "make": lambda: LogisticRegression(C=5.0, max_iter=1000, solver="lbfgs")},
+    {"name": "Logistic (C=6.0)",  "make": lambda: LogisticRegression(C=6.0, max_iter=1000, solver="lbfgs")},
 
     # Linear Support Vector Machines (Squared Hinge Max-Margin)
     {"name": "Linear SVM (C=0.1)", "make": lambda: LinearSVC(C=0.1, max_iter=2500, random_state=SEED)},
@@ -78,6 +80,7 @@ ALGO_GRID = [
     {"name": "Sparse L1 (C=2.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=2.0, solver="liblinear", random_state=SEED, max_iter=1000)},
     {"name": "Sparse L1 (C=3.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=3.0, solver="liblinear", random_state=SEED, max_iter=1000)},
     {"name": "Sparse L1 (C=4.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=4.0, solver="liblinear", random_state=SEED, max_iter=1000)},
+    {"name": "Sparse L1 (C=5.0)",  "make": lambda: LogisticRegression(l1_ratio=1.0, C=5.0, solver="liblinear", random_state=SEED, max_iter=1000)},
 ]
 
 
